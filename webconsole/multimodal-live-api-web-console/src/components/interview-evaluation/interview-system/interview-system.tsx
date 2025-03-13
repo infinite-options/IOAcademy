@@ -1,16 +1,22 @@
 // src/components/interview-evaluation/interview-system/InterviewSystem.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLiveAPIContext } from "../../../contexts/LiveAPIContext";
 import InterviewMenu, {
   InterviewType,
   SkillLevel,
 } from "../interview-menu/InterviewMenu";
 import { generateInterviewPrompt } from "./interviewPrompts";
-import { isModelTurn } from "../../../multimodal-live-types";
+import {
+  isModelTurn,
+  isClientContentMessage,
+  ServerContentMessage,
+} from "../../../multimodal-live-types";
+import { useLoggerStore } from "../../../lib/store-logger";
 import "./interview-system.scss";
 
 const InterviewSystem: React.FC = () => {
   const { client, connected, connect, config, setConfig } = useLiveAPIContext();
+  const { logs } = useLoggerStore();
   const [interviewType, setInterviewType] = useState<InterviewType | null>(
     null
   );
@@ -21,6 +27,81 @@ const InterviewSystem: React.FC = () => {
     null
   );
   const [isRequestingEvaluation, setIsRequestingEvaluation] = useState(false);
+  const [interviewTranscript, setInterviewTranscript] = useState<string | null>(
+    null
+  );
+  const [showTranscript, setShowTranscript] = useState(false);
+  const evaluationResponseRef = useRef<string>("");
+  const hasGeneratedTranscript = useRef<boolean>(false);
+
+  // Generate transcript from logs - memoized to avoid regenerating unnecessarily
+  const generateTranscript = useCallback(() => {
+    console.log("Generating transcript from logs:", logs.length);
+    let formattedTranscript = "# Interview Transcript\n\n";
+
+    logs.forEach((log) => {
+      const timestamp = log.date.toLocaleTimeString();
+
+      try {
+        // Handle user messages (client content)
+        if (isClientContentMessage(log.message)) {
+          const { turns } = log.message.clientContent;
+          turns.forEach((turn) => {
+            const userText = turn.parts
+              .filter((part) => part.text)
+              .map((part) => part.text)
+              .join(" ");
+
+            if (userText.trim()) {
+              formattedTranscript += `[${timestamp}] **Candidate:** ${userText}\n\n`;
+            }
+          });
+        }
+
+        // Handle model responses
+        if (
+          typeof log.message === "object" &&
+          "serverContent" in log.message &&
+          log.message.serverContent &&
+          "modelTurn" in log.message.serverContent
+        ) {
+          const modelText = log.message.serverContent.modelTurn.parts
+            .filter((part) => part.text)
+            .map((part) => part.text)
+            .join(" ");
+
+          if (modelText.trim()) {
+            formattedTranscript += `[${timestamp}] **Interviewer:** ${modelText}\n\n`;
+          }
+        }
+      } catch (err) {
+        console.error("Error processing log entry:", err, log);
+      }
+    });
+
+    return formattedTranscript;
+  }, [logs]);
+
+  // Process logs and generate transcript when interview concludes
+  useEffect(() => {
+    if (
+      isRequestingEvaluation &&
+      logs.length > 0 &&
+      !hasGeneratedTranscript.current
+    ) {
+      const transcript = generateTranscript();
+      console.log(
+        "Generated transcript:",
+        transcript.substring(0, 100) + "..."
+      );
+
+      if (transcript.length > 30) {
+        // Ensure the transcript has meaningful content
+        setInterviewTranscript(transcript);
+        hasGeneratedTranscript.current = true;
+      }
+    }
+  }, [logs, isRequestingEvaluation, generateTranscript]);
 
   // Modify the function that listens for model responses
   useEffect(() => {
@@ -31,15 +112,41 @@ const InterviewSystem: React.FC = () => {
           .map((part: { text?: string }) => part.text || "")
           .join("");
 
-        // If we're waiting for evaluation, capture this response as feedback
-        if (
-          isRequestingEvaluation &&
-          (responseText.includes("TECHNICAL SKILLS ASSESSMENT") ||
+        // If we're waiting for evaluation, capture this response
+        if (isRequestingEvaluation) {
+          evaluationResponseRef.current += responseText;
+          console.log(
+            "Collecting evaluation response:",
+            responseText.substring(0, 50) + "..."
+          );
+
+          // Check if the response contains evaluation content using more flexible criteria
+          if (
+            responseText.includes("ASSESSMENT") ||
             responseText.includes("Score:") ||
-            responseText.toLowerCase().includes("evaluation"))
-        ) {
-          setEvaluationFeedback(responseText);
-          setIsRequestingEvaluation(false);
+            responseText.includes("FEEDBACK") ||
+            responseText.toLowerCase().includes("evaluation") ||
+            responseText.includes("/10") ||
+            responseText.toLowerCase().includes("technical") ||
+            responseText.toLowerCase().includes("communication")
+          ) {
+            // Wait for the full response to arrive
+            setTimeout(() => {
+              console.log(
+                "Setting evaluation feedback:",
+                evaluationResponseRef.current.substring(0, 100) + "..."
+              );
+              setEvaluationFeedback(evaluationResponseRef.current);
+              setIsRequestingEvaluation(false);
+
+              // Generate and save transcript if not already done
+              if (!hasGeneratedTranscript.current) {
+                const transcript = generateTranscript();
+                setInterviewTranscript(transcript);
+                hasGeneratedTranscript.current = true;
+              }
+            }, 1000);
+          }
         }
       }
     };
@@ -48,7 +155,39 @@ const InterviewSystem: React.FC = () => {
     return () => {
       client.off("content", handleModelResponse);
     };
-  }, [client, isRequestingEvaluation]);
+  }, [client, isRequestingEvaluation, generateTranscript]);
+
+  // Register for turn complete events to handle end of responses
+  useEffect(() => {
+    const handleTurnComplete = () => {
+      if (isRequestingEvaluation && evaluationResponseRef.current) {
+        console.log("Turn complete received while waiting for evaluation");
+        // Additional check in case the evaluation detection logic missed the content
+        setTimeout(() => {
+          if (
+            isRequestingEvaluation &&
+            evaluationResponseRef.current.length > 100
+          ) {
+            console.log("Forcing evaluation feedback completion");
+            setEvaluationFeedback(evaluationResponseRef.current);
+            setIsRequestingEvaluation(false);
+
+            // Generate and save transcript if not already done
+            if (!hasGeneratedTranscript.current) {
+              const transcript = generateTranscript();
+              setInterviewTranscript(transcript);
+              hasGeneratedTranscript.current = true;
+            }
+          }
+        }, 500);
+      }
+    };
+
+    client.on("turncomplete", handleTurnComplete);
+    return () => {
+      client.off("turncomplete", handleTurnComplete);
+    };
+  }, [client, isRequestingEvaluation, generateTranscript]);
 
   const handleSelectionComplete = async (
     type: InterviewType,
@@ -76,6 +215,13 @@ const InterviewSystem: React.FC = () => {
       await connect();
     }
 
+    // Reset evaluation data from previous interviews
+    setEvaluationFeedback(null);
+    setInterviewTranscript(null);
+    setShowTranscript(false);
+    evaluationResponseRef.current = "";
+    hasGeneratedTranscript.current = false;
+
     // Start the interview with the initial question
     if (interviewType && skillLevel) {
       const initialQuestion = generateInterviewPrompt(
@@ -92,6 +238,15 @@ const InterviewSystem: React.FC = () => {
     setSkillLevel(null);
     setInterviewInProgress(false);
     setInterviewStarted(false);
+    setEvaluationFeedback(null);
+    setInterviewTranscript(null);
+    setShowTranscript(false);
+    evaluationResponseRef.current = "";
+    hasGeneratedTranscript.current = false;
+  };
+
+  const toggleTranscriptView = () => {
+    setShowTranscript(!showTranscript);
   };
 
   return (
@@ -140,7 +295,7 @@ const InterviewSystem: React.FC = () => {
         </div>
       )}
 
-      {interviewStarted && (
+      {interviewStarted && !evaluationFeedback && (
         <div className="interview-in-progress">
           <div className="interview-header">
             <div className="interview-type">
@@ -158,6 +313,9 @@ const InterviewSystem: React.FC = () => {
               className="end-interview-button"
               onClick={() => {
                 setIsRequestingEvaluation(true);
+                evaluationResponseRef.current = ""; // Reset previous evaluation content
+                hasGeneratedTranscript.current = false;
+                console.log("Requesting evaluation...");
                 client.send([
                   {
                     text: `
@@ -186,26 +344,78 @@ Please be specific and actionable in your feedback, referencing particular respo
       )}
 
       {evaluationFeedback && (
-        <div className="evaluation-feedback-container">
-          <h2>Interview Evaluation</h2>
-          <div className="feedback-content">
-            {evaluationFeedback.split("\n").map((line, index) => {
-              if (
-                line.startsWith("##") ||
-                line.includes("ASSESSMENT") ||
-                line.includes("FEEDBACK")
-              ) {
-                return <h3 key={index}>{line.replace("##", "")}</h3>;
-              } else if (line.includes("Score:")) {
-                return (
-                  <div className="score-line" key={index}>
-                    {line}
-                  </div>
-                );
-              } else {
-                return <p key={index}>{line}</p>;
-              }
-            })}
+        <div className="evaluation-results-container">
+          <div className="evaluation-tabs">
+            <button
+              className={`tab-button ${!showTranscript ? "active" : ""}`}
+              onClick={() => setShowTranscript(false)}
+            >
+              Evaluation
+            </button>
+            <button
+              className={`tab-button ${showTranscript ? "active" : ""}`}
+              onClick={() => setShowTranscript(true)}
+            >
+              Transcript
+            </button>
+          </div>
+
+          {!showTranscript && (
+            <div className="evaluation-feedback-container">
+              <h2>Interview Evaluation</h2>
+              <div className="feedback-content">
+                {evaluationFeedback.split("\n").map((line, index) => {
+                  if (
+                    line.includes("ASSESSMENT") ||
+                    line.includes("FEEDBACK") ||
+                    line.startsWith("##")
+                  ) {
+                    return <h3 key={index}>{line.replace("##", "").trim()}</h3>;
+                  } else if (line.includes("Score:") || line.includes("/10")) {
+                    return (
+                      <div className="score-line" key={index}>
+                        {line}
+                      </div>
+                    );
+                  } else {
+                    return <p key={index}>{line}</p>;
+                  }
+                })}
+              </div>
+            </div>
+          )}
+
+          {showTranscript && interviewTranscript && (
+            <div className="transcript-container">
+              <h2>Interview Transcript</h2>
+              <div className="transcript-content">
+                {interviewTranscript.split("\n").map((line, index) => {
+                  if (line.includes("**Candidate:**")) {
+                    return (
+                      <p key={index} className="candidate-message">
+                        {line}
+                      </p>
+                    );
+                  } else if (line.includes("**Interviewer:**")) {
+                    return (
+                      <p key={index} className="interviewer-message">
+                        {line}
+                      </p>
+                    );
+                  } else if (line.startsWith("#")) {
+                    return <h3 key={index}>{line.replace("#", "").trim()}</h3>;
+                  } else {
+                    return <p key={index}>{line}</p>;
+                  }
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="action-buttons">
+            <button className="primary-button" onClick={resetInterview}>
+              Start New Interview
+            </button>
           </div>
         </div>
       )}
