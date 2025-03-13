@@ -1,2 +1,0 @@
-# IOAcademy
-IO Interviewing Tool
