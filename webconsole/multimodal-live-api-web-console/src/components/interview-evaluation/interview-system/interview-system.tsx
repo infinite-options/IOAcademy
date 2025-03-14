@@ -1,4 +1,4 @@
-// src/components/interview-evaluation/interview-system/InterviewSystem.tsx
+// Updated src/components/interview-evaluation/interview-system/interview-system.tsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLiveAPIContext } from "../../../contexts/LiveAPIContext";
 import InterviewMenu, {
@@ -12,11 +12,14 @@ import {
   ServerContentMessage,
 } from "../../../multimodal-live-types";
 import { useLoggerStore } from "../../../lib/store-logger";
+import { useInterviewStore } from "../../../stores/interviewStore";
+import InterviewTranscript from "../interview-transcript/InterviewTranscript";
 import "./interview-system.scss";
 
 const InterviewSystem: React.FC = () => {
   const { client, connected, connect, config, setConfig } = useLiveAPIContext();
   const { logs } = useLoggerStore();
+  const interviewStore = useInterviewStore();
   const [interviewType, setInterviewType] = useState<InterviewType | null>(
     null
   );
@@ -54,6 +57,9 @@ const InterviewSystem: React.FC = () => {
 
             if (userText.trim()) {
               formattedTranscript += `[${timestamp}] **Candidate:** ${userText}\n\n`;
+
+              // Also add to interview store for the transcript component
+              interviewStore.addMessage("candidate", userText);
             }
           });
         }
@@ -72,6 +78,9 @@ const InterviewSystem: React.FC = () => {
 
           if (modelText.trim()) {
             formattedTranscript += `[${timestamp}] **Interviewer:** ${modelText}\n\n`;
+
+            // Also add to interview store for the transcript component
+            interviewStore.addMessage("interviewer", modelText);
           }
         }
       } catch (err) {
@@ -80,7 +89,7 @@ const InterviewSystem: React.FC = () => {
     });
 
     return formattedTranscript;
-  }, [logs]);
+  }, [logs, interviewStore]);
 
   // Process logs and generate transcript when interview concludes
   useEffect(() => {
@@ -112,6 +121,15 @@ const InterviewSystem: React.FC = () => {
           .map((part: { text?: string }) => part.text || "")
           .join("");
 
+        // Add interviewer response to the interview store in real-time
+        if (
+          responseText.trim() &&
+          interviewStarted &&
+          !isRequestingEvaluation
+        ) {
+          interviewStore.addMessage("interviewer", responseText);
+        }
+
         // If we're waiting for evaluation, capture this response
         if (isRequestingEvaluation) {
           evaluationResponseRef.current += responseText;
@@ -137,7 +155,27 @@ const InterviewSystem: React.FC = () => {
                 evaluationResponseRef.current.substring(0, 100) + "..."
               );
               setEvaluationFeedback(evaluationResponseRef.current);
+              interviewStore.setEvaluationFeedback(
+                evaluationResponseRef.current
+              );
+
+              // Try to extract scores
+              const technicalMatch = evaluationResponseRef.current.match(
+                /TECHNICAL.+?Score:\s*(\d+)/is
+              );
+              const communicationMatch = evaluationResponseRef.current.match(
+                /COMMUNICATION.+?Score:\s*(\d+)/is
+              );
+
+              if (technicalMatch && communicationMatch) {
+                interviewStore.setScores({
+                  technical: parseInt(technicalMatch[1]),
+                  communication: parseInt(communicationMatch[1]),
+                });
+              }
+
               setIsRequestingEvaluation(false);
+              interviewStore.endInterview();
 
               // Generate and save transcript if not already done
               if (!hasGeneratedTranscript.current) {
@@ -155,7 +193,13 @@ const InterviewSystem: React.FC = () => {
     return () => {
       client.off("content", handleModelResponse);
     };
-  }, [client, isRequestingEvaluation, generateTranscript]);
+  }, [
+    client,
+    isRequestingEvaluation,
+    generateTranscript,
+    interviewStarted,
+    interviewStore,
+  ]);
 
   // Register for turn complete events to handle end of responses
   useEffect(() => {
@@ -170,7 +214,9 @@ const InterviewSystem: React.FC = () => {
           ) {
             console.log("Forcing evaluation feedback completion");
             setEvaluationFeedback(evaluationResponseRef.current);
+            interviewStore.setEvaluationFeedback(evaluationResponseRef.current);
             setIsRequestingEvaluation(false);
+            interviewStore.endInterview();
 
             // Generate and save transcript if not already done
             if (!hasGeneratedTranscript.current) {
@@ -187,7 +233,7 @@ const InterviewSystem: React.FC = () => {
     return () => {
       client.off("turncomplete", handleTurnComplete);
     };
-  }, [client, isRequestingEvaluation, generateTranscript]);
+  }, [client, isRequestingEvaluation, generateTranscript, interviewStore]);
 
   const handleSelectionComplete = async (
     type: InterviewType,
@@ -195,6 +241,10 @@ const InterviewSystem: React.FC = () => {
   ) => {
     setInterviewType(type);
     setSkillLevel(level);
+
+    // Update interview store
+    interviewStore.setInterviewType(type);
+    interviewStore.setSkillLevel(level);
 
     // Generate the appropriate prompt
     const prompt = generateInterviewPrompt(type, level);
@@ -222,6 +272,10 @@ const InterviewSystem: React.FC = () => {
     evaluationResponseRef.current = "";
     hasGeneratedTranscript.current = false;
 
+    // Reset and start the interview in the store
+    interviewStore.resetInterview();
+    interviewStore.startInterview();
+
     // Start the interview with the initial question
     if (interviewType && skillLevel) {
       const initialQuestion = generateInterviewPrompt(
@@ -243,6 +297,9 @@ const InterviewSystem: React.FC = () => {
     setShowTranscript(false);
     evaluationResponseRef.current = "";
     hasGeneratedTranscript.current = false;
+
+    // Reset the interview store
+    interviewStore.resetInterview();
   };
 
   const toggleTranscriptView = () => {
@@ -340,6 +397,9 @@ Please be specific and actionable in your feedback, referencing particular respo
               End Interview & Get Feedback
             </button>
           </div>
+
+          {/* Show live transcript during the interview */}
+          <InterviewTranscript />
         </div>
       )}
 
@@ -385,32 +445,7 @@ Please be specific and actionable in your feedback, referencing particular respo
             </div>
           )}
 
-          {showTranscript && interviewTranscript && (
-            <div className="transcript-container">
-              <h2>Interview Transcript</h2>
-              <div className="transcript-content">
-                {interviewTranscript.split("\n").map((line, index) => {
-                  if (line.includes("**Candidate:**")) {
-                    return (
-                      <p key={index} className="candidate-message">
-                        {line}
-                      </p>
-                    );
-                  } else if (line.includes("**Interviewer:**")) {
-                    return (
-                      <p key={index} className="interviewer-message">
-                        {line}
-                      </p>
-                    );
-                  } else if (line.startsWith("#")) {
-                    return <h3 key={index}>{line.replace("#", "").trim()}</h3>;
-                  } else {
-                    return <p key={index}>{line}</p>;
-                  }
-                })}
-              </div>
-            </div>
-          )}
+          {showTranscript && <InterviewTranscript />}
 
           <div className="action-buttons">
             <button className="primary-button" onClick={resetInterview}>
