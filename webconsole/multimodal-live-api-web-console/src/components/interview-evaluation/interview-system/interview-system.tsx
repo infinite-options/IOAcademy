@@ -10,11 +10,26 @@ import {
   isModelTurn,
   isClientContentMessage,
   ServerContentMessage,
+  type ToolCall,
+  type LiveConfig,
+  type LiveFunctionCall,
 } from "../../../multimodal-live-types";
 import { useLoggerStore } from "../../../lib/store-logger";
 import { useInterviewStore } from "../../../stores/interviewStore";
 import InterviewTranscript from "../interview-transcript/InterviewTranscript";
 import "./interview-system.scss";
+import { transcribeAudioDeclaration } from "./transcriptionFunction";
+import { Tool } from "@google/generative-ai";
+
+// Define a type that includes functionDeclarations
+interface FunctionDeclarationTool {
+  functionDeclarations: any[];
+}
+
+// Type guard to check if a tool is a FunctionDeclarationTool
+function hasFunctionDeclarations(tool: any): tool is FunctionDeclarationTool {
+  return "functionDeclarations" in tool;
+}
 
 const InterviewSystem: React.FC = () => {
   const { client, connected, connect, config, setConfig } = useLiveAPIContext();
@@ -36,6 +51,11 @@ const InterviewSystem: React.FC = () => {
   const [showTranscript, setShowTranscript] = useState(false);
   const evaluationResponseRef = useRef<string>("");
   const hasGeneratedTranscript = useRef<boolean>(false);
+  const [prompt, setPrompt] = useState<{ systemPrompt: string } | null>(null);
+  const [pendingAudioTimestamp, setPendingAudioTimestamp] = useState<
+    number | null
+  >(null);
+  const audioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Generate transcript from logs - memoized to avoid regenerating unnecessarily
   const generateTranscript = useCallback(() => {
@@ -90,6 +110,81 @@ const InterviewSystem: React.FC = () => {
 
     return formattedTranscript;
   }, [logs, interviewStore]);
+
+  // New useEffect to handle configuration with transcribeAudioDeclaration
+  useEffect(() => {
+    if (!prompt) return;
+
+    // Get existing tools or initialize empty array
+    const existingTools = config.tools || [];
+
+    // Check if we already have the transcribeAudioDeclaration
+    let alreadyHasDeclaration = false;
+
+    for (const tool of existingTools) {
+      if (hasFunctionDeclarations(tool)) {
+        const declarations = tool.functionDeclarations;
+        if (
+          declarations.some(
+            (dec) => dec.name === transcribeAudioDeclaration.name
+          )
+        ) {
+          alreadyHasDeclaration = true;
+          break;
+        }
+      }
+    }
+
+    if (!alreadyHasDeclaration) {
+      // Create new copy of config with updated tools
+      let updatedTools;
+
+      // Find if we already have functionDeclarations
+      const existingFuncDecIdx = existingTools.findIndex((tool) =>
+        hasFunctionDeclarations(tool)
+      );
+
+      if (existingFuncDecIdx >= 0) {
+        // Update existing functionDeclarations
+        updatedTools = [...existingTools];
+        const existingTool = updatedTools[
+          existingFuncDecIdx
+        ] as FunctionDeclarationTool;
+        const existingFuncDecs = existingTool.functionDeclarations || [];
+        updatedTools[existingFuncDecIdx] = {
+          functionDeclarations: [
+            ...existingFuncDecs,
+            transcribeAudioDeclaration,
+          ],
+        };
+      } else {
+        // Add new functionDeclarations tool
+        updatedTools = [
+          ...existingTools,
+          { functionDeclarations: [transcribeAudioDeclaration] },
+        ];
+      }
+
+      // Create and set the new config
+      const newConfig: LiveConfig = {
+        ...config,
+        systemInstruction: {
+          parts: [{ text: prompt.systemPrompt }],
+        },
+        tools: updatedTools,
+      };
+
+      setConfig(newConfig);
+    } else {
+      // Just update the system prompt if we already have the function declaration
+      setConfig({
+        ...config,
+        systemInstruction: {
+          parts: [{ text: prompt.systemPrompt }],
+        },
+      });
+    }
+  }, [prompt, config, setConfig]);
 
   // Process logs and generate transcript when interview concludes
   useEffect(() => {
@@ -247,18 +342,93 @@ const InterviewSystem: React.FC = () => {
     interviewStore.setSkillLevel(level);
 
     // Generate the appropriate prompt
-    const prompt = generateInterviewPrompt(type, level);
-
-    // Configure the AI with the appropriate system prompt
-    setConfig({
-      ...config,
-      systemInstruction: {
-        parts: [{ text: prompt.systemPrompt }],
-      },
-    });
+    const generatedPrompt = generateInterviewPrompt(type, level);
+    setPrompt(generatedPrompt);
 
     setInterviewInProgress(true);
   };
+
+  // Add a handler for tool calls
+  useEffect(() => {
+    const handleToolCall = (toolCall: ToolCall) => {
+      console.log("Tool call received:", toolCall);
+
+      if (toolCall && toolCall.functionCalls) {
+        const functionCall = toolCall.functionCalls.find(
+          (fc: LiveFunctionCall) => fc.name === transcribeAudioDeclaration.name
+        );
+
+        if (functionCall && functionCall.args) {
+          console.log(
+            "FUNCTION CALLED with transcription:",
+            (functionCall.args as any).transcription
+          );
+
+          const args = functionCall.args as { transcription: string };
+          const transcription = args.transcription;
+
+          if (transcription && interviewStarted && !isRequestingEvaluation) {
+            // Clear the pending audio timestamp when transcription arrives
+            setPendingAudioTimestamp(null);
+
+            // Add the transcription to the interview store
+            interviewStore.addMessage("candidate", transcription);
+
+            // Respond to the tool call
+            client.sendToolResponse({
+              functionResponses: [
+                {
+                  response: { success: true },
+                  id: functionCall.id,
+                },
+              ],
+            });
+          }
+        }
+      }
+    };
+
+    client.on("toolcall", handleToolCall);
+    return () => {
+      client.off("toolcall", handleToolCall);
+    };
+  }, [client, interviewStore, interviewStarted, isRequestingEvaluation]);
+
+  // Handle audio input events
+  useEffect(() => {
+    const handleAudioContent = () => {
+      // Record that we received audio
+      const timestamp = Date.now();
+      console.log("Audio detected, setting pendingAudioTimestamp:", timestamp);
+      setPendingAudioTimestamp(timestamp);
+
+      // Clear any existing timeout
+      if (audioTimeoutRef.current) {
+        clearTimeout(audioTimeoutRef.current);
+      }
+
+      // Set a new timeout
+      audioTimeoutRef.current = setTimeout(() => {
+        // Check if this is still the latest audio and no transcription was added
+        if (pendingAudioTimestamp === timestamp) {
+          console.log("Fallback triggered, adding placeholder message");
+          interviewStore.addMessage(
+            "candidate",
+            "[Audio response captured - transcription pending]"
+          );
+          setPendingAudioTimestamp(null);
+        }
+      }, 3000); // Wait 3 seconds for transcription
+    };
+
+    client.on("audio", handleAudioContent);
+    return () => {
+      client.off("audio", handleAudioContent);
+      if (audioTimeoutRef.current) {
+        clearTimeout(audioTimeoutRef.current);
+      }
+    };
+  }, [client, interviewStore, pendingAudioTimestamp]);
 
   const startInterview = async () => {
     if (!connected) {

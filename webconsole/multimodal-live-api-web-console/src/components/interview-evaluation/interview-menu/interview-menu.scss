@@ -15,14 +15,6 @@
     color: var(--Neutral-90);
   }
 
-  .interview-type-selection,
-  .skill-assessment {
-    background-color: var(--Neutral-10);
-    border-radius: 8px;
-    padding: 2rem;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-  }
-
   .interview-type-buttons {
     display: flex;
     flex-direction: column;
@@ -31,7 +23,8 @@
     button {
       padding: 1rem;
       font-size: 1rem;
-      background-color: var(--Neutral-20);
+      background-color: var(--Blue-500); // Change to blue (#1f94ff)
+      color: white; // Ensure text is white for contrast
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -39,7 +32,7 @@
       text-align: left;
 
       &:hover {
-        background-color: var(--Neutral-30);
+        background-color: #0d84f0; // Slightly darker blue for hover
         transform: translateY(-2px);
       }
     }
@@ -55,7 +48,8 @@
       padding: 1rem;
       font-size: 1rem;
       font-weight: 500;
-      background-color: var(--Neutral-20);
+      background-color: var(--Blue-500); // Change to blue (#1f94ff)
+      color: white; // Ensure text is white
       border: none;
       border-radius: 4px;
       cursor: pointer;
@@ -67,17 +61,16 @@
         display: block;
         font-size: 0.85rem;
         font-weight: 400;
-        color: var(--Neutral-70);
+        color: rgba(255, 255, 255, 0.8); // Lighter white for better readability
         margin-top: 0.25rem;
       }
 
       &:hover {
-        background-color: var(--Neutral-30);
+        background-color: #0d84f0; // Slightly darker blue for hover
         transform: translateY(-2px);
       }
     }
   }
-
   .back-button {
     background-color: transparent;
     border: 1px solid var(--Neutral-40);

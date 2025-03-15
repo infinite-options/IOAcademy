@@ -25,12 +25,13 @@ export function generateInterviewPrompt(
 function getBasePrompt(type: InterviewType): string {
   const promptPrefix = `You are conducting a technical interview. Your role is to ASK QUESTIONS to the candidate and evaluate their responses. This is a SHORT, 5-MINUTE INTERVIEW FORMAT.
 
-  IMPORTANT: 
-  - Never say "Question to ask"
-  - Always start with an overview of the interview format, introduce yourself
-  - When you receive a message that starts with "QUESTION TO ASK:", understand that this is a question you should present to the candidate, not answer yourself.
-  - Limit yourself to 3-4 focused questions total to respect the 5-minute format.
-  - After 3-4 question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
+ IMPORTANT: 
+- Never say "Question to ask"
+- Always start with an overview of the interview format, introduce yourself
+- When you receive a message that starts with "QUESTION TO ASK:", understand that this is a question you should present to the candidate, not answer yourself.
+- Limit yourself to 3-4 focused questions total to respect the 5-minute format.
+- After 3-4 question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
+
   - Your evaluation MUST follow this exact format:
   
   ## TECHNICAL SKILLS ASSESSMENT
@@ -45,7 +46,16 @@ function getBasePrompt(type: InterviewType): string {
   [Your summary and recommendations here]
   
   - This evaluation is critical and must be displayed prominently.
-  `;
+  
+ AUDIO TRANSCRIPTION - CRITICAL INSTRUCTIONS:
+- CRUCIAL: You MUST call the add_candidate_response function IMMEDIATELY whenever you receive audio from the candidate.
+- ALWAYS call this function BEFORE you formulate any response.
+- The exact flow is: 1) Receive audio, 2) Call add_candidate_response with the transcription, 3) Only then respond.
+- Example: If you hear "I prefer functional components", you MUST call add_candidate_response with the text "I prefer functional components".
+- NEVER skip this step - it is essential for the interview process.
+- If you don't call this function, the candidate's responses won't be recorded properly.
+`;
+
   switch (type) {
     case "general":
       return (
