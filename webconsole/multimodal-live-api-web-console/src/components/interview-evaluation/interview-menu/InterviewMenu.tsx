@@ -7,8 +7,12 @@ export type InterviewType =
   | "frontend"
   | "backend"
   | "fullstack"
-  | "data";
+  | "data"
+  | "python"
+  | "java";
 export type SkillLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export type InterviewCategory = "domain" | "language";
 
 interface InterviewMenuProps {
   onSelectionComplete: (type: InterviewType, initialLevel: SkillLevel) => void;
@@ -17,8 +21,13 @@ interface InterviewMenuProps {
 const InterviewMenu: React.FC<InterviewMenuProps> = ({
   onSelectionComplete,
 }) => {
+  const [selectedCategory, setSelectedCategory] = useState<InterviewCategory | null>(null);
   const [selectedType, setSelectedType] = useState<InterviewType | null>(null);
   const [showSkillAssessment, setShowSkillAssessment] = useState(false);
+
+  const handleCategorySelection = (category: InterviewCategory) => {
+    setSelectedCategory(category);
+  };
 
   const handleTypeSelection = (type: InterviewType) => {
     setSelectedType(type);
@@ -31,13 +40,45 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
     }
   };
 
+  const handleBack = () => {
+    if (showSkillAssessment) {
+      // Go back to type selection
+      setSelectedType(null);
+      setShowSkillAssessment(false);
+    } else if (selectedCategory) {
+      // Go back to category selection
+      setSelectedCategory(null);
+    }
+  };
+
   return (
     <div className="interview-menu">
       <h2>Technical Interview System</h2>
 
-      {!showSkillAssessment && (
+      {!selectedCategory && (
+        <div className="interview-category-selection">
+          <h3>Choose Interview Category</h3>
+          <p>Select the type of interview you'd like to take:</p>
+          <div className="interview-category-buttons">
+            <button onClick={() => handleCategorySelection("domain")}>
+              Domain-Specific
+              <span className="category-description">
+                Focus on specific technical domains (Frontend, Backend, Fullstack, Data Engineering, etc.)
+              </span>
+            </button>
+            <button onClick={() => handleCategorySelection("language")}>
+              Language-Specific
+              <span className="category-description">
+                Focus on programming language expertise (Python, Java)
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedCategory === "domain" && !showSkillAssessment && (
         <div className="interview-type-selection">
-          <h3>Select Interview Type</h3>
+          <h3>Select Domain</h3>
           <div className="interview-type-buttons">
             <button onClick={() => handleTypeSelection("frontend")}>
               Front End Engineer
@@ -55,6 +96,26 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
               General Interview
             </button>
           </div>
+          <button className="back-button" onClick={handleBack}>
+            Back to Category Selection
+          </button>
+        </div>
+      )}
+
+      {selectedCategory === "language" && !showSkillAssessment && (
+        <div className="interview-type-selection">
+          <h3>Select Programming Language</h3>
+          <div className="interview-type-buttons">
+            <button onClick={() => handleTypeSelection("python")}>
+              Python
+            </button>
+            <button onClick={() => handleTypeSelection("java")}>
+              Java
+            </button>
+          </div>
+          <button className="back-button" onClick={handleBack}>
+            Back to Category Selection
+          </button>
         </div>
       )}
 
@@ -99,14 +160,8 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
             </button>
           </div>
 
-          <button
-            className="back-button"
-            onClick={() => {
-              setSelectedType(null);
-              setShowSkillAssessment(false);
-            }}
-          >
-            Back to Interview Selection
+          <button className="back-button" onClick={handleBack}>
+            Back to {selectedCategory === "domain" ? "Domain" : "Language"} Selection
           </button>
         </div>
       )}

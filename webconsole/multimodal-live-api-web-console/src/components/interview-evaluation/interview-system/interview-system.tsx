@@ -20,6 +20,15 @@ import InterviewTranscript from "../interview-transcript/InterviewTranscript";
 import "./interview-system.scss";
 import { transcribeAudioDeclaration } from "./transcriptionFunction";
 import { Tool } from "@google/generative-ai";
+import {
+  generateAllQuestions,
+  saveQuestionBank,
+  loadQuestionBank,
+  clearQuestionBank,
+  hasQuestionBank,
+  type QuestionBank,
+} from "./questionGenerator";
+import { MultimodalLiveClient } from "../../../lib/multimodal-live-client";
 
 // Define a type that includes functionDeclarations
 interface FunctionDeclarationTool {
@@ -56,6 +65,11 @@ const InterviewSystem: React.FC = () => {
     number | null
   >(null);
   const audioTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [questionBank, setQuestionBank] = useState<QuestionBank | null>(null);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [questionGenerationError, setQuestionGenerationError] = useState<
+    string | null
+  >(null);
 
   // Generate transcript from logs - memoized to avoid regenerating unnecessarily
   const generateTranscript = useCallback(() => {
@@ -336,16 +350,108 @@ const InterviewSystem: React.FC = () => {
   ) => {
     setInterviewType(type);
     setSkillLevel(level);
+    setQuestionGenerationError(null);
 
     // Update interview store
     interviewStore.setInterviewType(type);
     interviewStore.setSkillLevel(level);
 
-    // Generate the appropriate prompt
-    const generatedPrompt = generateInterviewPrompt(type, level);
+    // QUESTION GENERATOR FEATURE DISABLED
+    // Using fallback questions from getInitialQuestion() instead
+    // To re-enable: uncomment the code below and comment out the simple version
+    
+    // Simple version: Use fallback questions (no LLM generation)
+    const generatedPrompt = generateInterviewPrompt(type, level, null);
     setPrompt(generatedPrompt);
-
     setInterviewInProgress(true);
+
+    /* QUESTION GENERATOR CODE (DISABLED)
+    // Generate questions BEFORE setting up the interview
+    setIsGeneratingQuestions(true);
+    try {
+      // Clear any existing question bank first
+      clearQuestionBank();
+
+      // Create a separate client instance for question generation to avoid conflicts
+      // Get API key from environment
+      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("REACT_APP_GEMINI_API_KEY not found");
+      }
+
+      const questionGenClient = new MultimodalLiveClient({
+        url: undefined, // Use default URL
+        apiKey: apiKey,
+      });
+
+      console.log("🤖 Starting to generate all interview questions...");
+      console.log(`📝 Using model: ${config.model || "default"}`);
+      console.log(`📋 Interview type: ${type}, Skill level: ${level}`);
+
+      // Connect the question generation client
+      const questionGenConfig: LiveConfig = {
+        ...config,
+        systemInstruction: {
+          parts: [
+            {
+              text: `You are a technical interview question generator. Generate questions in JSON format only.`,
+            },
+          ],
+        },
+      };
+
+      console.log("🔌 Connecting question generation client...");
+      await questionGenClient.connect(questionGenConfig);
+      console.log("✅ Question generation client connected");
+      
+      // Wait a moment for the connection to be fully established
+      await new Promise(resolve => setTimeout(resolve, 500));
+      console.log("⏳ Waited for connection stabilization");
+
+      // Generate all questions using LLM (including initial question)
+      console.log("🚀 Calling generateAllQuestions...");
+      const newQuestionBank = await generateAllQuestions(
+        type,
+        level,
+        questionGenClient,
+        questionGenConfig
+      );
+
+      console.log("🎉 Question generation completed successfully!");
+      console.log(`📊 Generated initial question + ${newQuestionBank.followUpQuestions.length} follow-up questions`);
+
+      // Disconnect the question generation client
+      questionGenClient.disconnect();
+      console.log("🔌 Question generation client disconnected");
+
+      // Save the question bank
+      saveQuestionBank(newQuestionBank);
+      setQuestionBank(newQuestionBank);
+
+      // Generate the appropriate prompt with question bank
+      const generatedPrompt = generateInterviewPrompt(type, level, newQuestionBank);
+      setPrompt(generatedPrompt);
+
+      setInterviewInProgress(true);
+    } catch (error: any) {
+      console.error("❌ Error generating questions:", error);
+      console.error("📋 Error details:", {
+        message: error.message,
+        stack: error.stack,
+        type: error.constructor.name
+      });
+      setQuestionGenerationError(
+        error.message || "Failed to generate questions. Will use fallback question."
+      );
+      // Fall back to default behavior with fallback question
+      const generatedPrompt = generateInterviewPrompt(type, level, null);
+      setPrompt(generatedPrompt);
+      setInterviewInProgress(true);
+    } finally {
+      setIsGeneratingQuestions(false);
+      console.log("🏁 Question generation process finished (success or error)");
+    }
+    */
   };
 
   // Add a handler for tool calls
@@ -447,11 +553,11 @@ const InterviewSystem: React.FC = () => {
     interviewStore.startInterview();
 
     // Start the interview with the initial question
+    // QUESTION GENERATOR DISABLED: Always use fallback question
     if (interviewType && skillLevel) {
-      const initialQuestion = generateInterviewPrompt(
-        interviewType,
-        skillLevel
-      ).initialQuestion;
+      const promptData = generateInterviewPrompt(interviewType, skillLevel, null);
+      const initialQuestion = promptData.initialQuestion;
+      
       client.send([{ text: "QUESTION TO ASK: " + initialQuestion }]);
       setInterviewStarted(true);
     }
@@ -497,7 +603,13 @@ const InterviewSystem: React.FC = () => {
                 ? "Backend Engineer "
                 : interviewType === "fullstack"
                 ? "Fullstack Developer "
-                : "Data Engineer "}
+                : interviewType === "data"
+                ? "Data Engineer "
+                : interviewType === "python"
+                ? "Python Programming "
+                : interviewType === "java"
+                ? "Java Programming "
+                : "Unknown"}
             </p>
             <p>
               <strong>Starting Difficulty Level:</strong> {skillLevel}/10
@@ -534,7 +646,13 @@ const InterviewSystem: React.FC = () => {
                 ? "Backend Engineer Interview "
                 : interviewType === "fullstack"
                 ? "Fullstack Developer Interview "
-                : "Data Engineer Interview "}
+                : interviewType === "data"
+                ? "Data Engineer Interview "
+                : interviewType === "python"
+                ? "Python Programming Interview "
+                : interviewType === "java"
+                ? "Java Programming Interview "
+                : "Unknown Interview"}
             </div>
             <button
               className="end-interview-button"

@@ -1,5 +1,6 @@
 // src/components/interview-system/interviewPrompts.ts
 import { InterviewType, SkillLevel } from "../interview-menu/InterviewMenu";
+import { QuestionBank } from "./questionGenerator";
 
 export interface InterviewPrompt {
   systemPrompt: string;
@@ -9,16 +10,76 @@ export interface InterviewPrompt {
 // Generate appropriate system prompt based on interview type and skill level
 export function generateInterviewPrompt(
   type: InterviewType,
-  skillLevel: SkillLevel
+  skillLevel: SkillLevel,
+  questionBank?: QuestionBank | null
 ): InterviewPrompt {
   const basePrompt = getBasePrompt(type);
   const levelAdjustedPrompt = adjustPromptForLevel(basePrompt, skillLevel);
-  const initialQuestion = getInitialQuestion(type, skillLevel);
+  
+  // Use generated initial question if available, otherwise use fallback
+  let systemPrompt: string;
+  let initialQuestion: string;
+  
+  if (questionBank && questionBank.initialQuestion && questionBank.followUpQuestions.length > 0) {
+    // Generate prompt with pre-generated questions
+    systemPrompt = generatePromptWithQuestionBank(levelAdjustedPrompt, questionBank);
+    initialQuestion = questionBank.initialQuestion;
+  } else {
+    // Use default behavior (fallback question)
+    systemPrompt = levelAdjustedPrompt;
+    initialQuestion = getInitialQuestion(type, skillLevel);
+  }
 
   return {
-    systemPrompt: levelAdjustedPrompt,
+    systemPrompt,
     initialQuestion,
   };
+}
+
+/**
+ * Generate a system prompt that includes pre-generated questions and rubric
+ */
+function generatePromptWithQuestionBank(
+  basePrompt: string,
+  questionBank: QuestionBank
+): string {
+  const followUpQuestionsText = questionBank.followUpQuestions
+    .map(
+      (q) => `
+Question ${q.id}: ${q.text}
+- Skill Areas: ${q.skillTags.join(", ")}
+- Expected Signals: ${q.expectedSignals.join(", ")}
+${q.followUpHints && q.followUpHints.length > 0 ? `- Follow-up Hints: ${q.followUpHints.join(", ")}` : ""}`
+    )
+    .join("\n");
+
+  const totalQuestions = 1 + questionBank.followUpQuestions.length; // Initial + follow-ups
+
+  const questionBankSection = `
+PRE-GENERATED QUESTION BANK:
+You have been provided with a complete set of ${totalQuestions} questions (Question 1 + ${questionBank.followUpQuestions.length} follow-ups) that were generated for this interview.
+
+INITIAL QUESTION (Question 1):
+${questionBank.initialQuestion}
+
+FOLLOW-UP QUESTIONS (to be asked in order):
+${followUpQuestionsText}
+
+EVALUATION RUBRIC:
+${questionBank.rubric}
+
+CRITICAL INSTRUCTIONS FOR USING PRE-GENERATED QUESTIONS:
+1. Question 1 (the initial question) should be asked first - present it naturally to the candidate
+2. You MUST ask the follow-up questions in the exact order provided (Question 2, then Question 3, then Question 4, etc.)
+3. When you receive a message starting with "QUESTION TO ASK:", that is the next question you should present to the candidate
+4. After the candidate answers each question, you may ask brief follow-up questions or provide hints, but then move to the next pre-generated question
+5. Use the provided rubric and expected signals to evaluate each response
+6. After asking all ${totalQuestions} questions (1 initial + ${questionBank.followUpQuestions.length} follow-ups), provide the formal evaluation
+7. Do NOT generate new questions - ONLY use the pre-generated questions listed above
+8. Track which question number you're on (1, 2, 3, 4, etc.) and progress sequentially through all questions
+`;
+
+  return basePrompt + questionBankSection;
 }
 
 // Base prompts for each interview type
@@ -398,6 +459,108 @@ EVALUATION APPROACH:
 - Evaluate knowledge of cloud data platform capabilities`
       );
 
+    case "python":
+      return (
+        promptPrefix +
+        `You are a technical interviewer specializing in Python programming. Your task is to evaluate candidates on their understanding of Python language features, best practices, and ecosystem.
+
+KEY ASSESSMENT AREAS:
+
+1. Python Fundamentals
+   • Core language features (data types, control structures, functions)
+   • Object-oriented programming in Python
+   • Pythonic coding style and idioms
+   • Built-in functions and standard library usage
+   • Exception handling and error management
+
+2. Advanced Python Concepts
+   • Decorators, generators, and context managers
+   • Metaclasses and descriptors
+   • Memory management and garbage collection
+   • Concurrency and parallelism (threading, multiprocessing, asyncio)
+   • Type hints and static typing
+
+3. Python Ecosystem & Libraries
+   • Popular libraries (NumPy, Pandas, Django, Flask, FastAPI, etc.)
+   • Package management (pip, poetry, conda)
+   • Virtual environments and dependency management
+   • Testing frameworks (pytest, unittest)
+   • Code quality tools (black, flake8, mypy)
+
+4. Data Structures & Algorithms
+   • Python-specific data structures (lists, dicts, sets, tuples)
+   • Algorithm implementation in Python
+   • Performance optimization and profiling
+   • Understanding of time/space complexity
+
+5. Best Practices & Design Patterns
+   • PEP 8 style guide compliance
+   • Design patterns in Python context
+   • Code organization and module structure
+   • Documentation and docstrings
+   • Version compatibility considerations
+
+EVALUATION APPROACH:
+- Assess both theoretical knowledge and practical Python skills
+- Evaluate understanding of Python-specific features and idioms
+- Test ability to write clean, Pythonic code
+- Probe for experience with Python ecosystem and tools
+- Assess awareness of performance implications and optimization techniques`
+
+      );
+
+    case "java":
+      return (
+        promptPrefix +
+        `You are a technical interviewer specializing in Java programming. Your task is to evaluate candidates on their understanding of Java language features, JVM, and ecosystem.
+
+KEY ASSESSMENT AREAS:
+
+1. Java Fundamentals
+   • Core language features (primitives, objects, classes, interfaces)
+   • Object-oriented programming principles
+   • Access modifiers and encapsulation
+   • Exception handling (checked vs unchecked)
+   • Collections framework (List, Set, Map, etc.)
+
+2. Advanced Java Concepts
+   • Generics and type erasure
+   • Reflection and annotations
+   • Lambda expressions and functional interfaces
+   • Streams API and Optional
+   • Concurrency (Threads, Executors, CompletableFuture)
+   • Memory model and garbage collection
+
+3. JVM & Performance
+   • JVM architecture and bytecode
+   • Memory management (heap, stack, method area)
+   • Garbage collection algorithms
+   • JIT compilation
+   • Performance tuning and profiling
+
+4. Java Ecosystem & Frameworks
+   • Build tools (Maven, Gradle)
+   • Popular frameworks (Spring, Hibernate, etc.)
+   • Testing frameworks (JUnit, TestNG, Mockito)
+   • Dependency injection
+   • Enterprise Java patterns
+
+5. Best Practices & Design Patterns
+   • SOLID principles in Java context
+   • Design patterns (Singleton, Factory, Observer, etc.)
+   • Code organization and package structure
+   • Documentation (JavaDoc)
+   • Version compatibility and migration
+
+EVALUATION APPROACH:
+- Assess both theoretical knowledge and practical Java skills
+- Evaluate understanding of JVM internals and memory management
+- Test ability to write clean, maintainable Java code
+- Probe for experience with Java ecosystem and frameworks
+- Assess awareness of concurrency challenges and best practices`
+
+      );
+
     default:
       return "";
   }
@@ -475,7 +638,11 @@ function getInitialQuestion(
   }
 
   // Questions organized by type and difficulty
-  const questions = {
+  // NOTE: These questions are now COMMENTED OUT - the system uses LLM-generated questions instead
+  // Keeping them here for reference/fallback purposes
+  /* eslint-disable */
+  /*
+  const questions: Record<InterviewType, Record<string, string>> = {
     general: {
       beginner:
         "I'd like to understand your technical background. Can you walk me through your most recent project, focusing on the specific technologies you used and your role in implementation? What challenges did you face and how did you overcome them?",
@@ -530,7 +697,48 @@ function getInitialQuestion(
       advanced:
         "Your company needs to implement a comprehensive data platform supporting both real-time analytics and historical reporting with petabytes of data across multiple business domains. Design the complete architecture, including ingestion, processing, storage, serving, and governance layers. Address schema evolution, data quality, performance optimization, cost management, and compliance requirements. How would you handle incremental implementation and migration from existing systems while minimizing business disruption?",
     },
-  };
 
-  return questions[type][difficulty];
+    python: {
+      beginner:
+        "Let's start with Python fundamentals. Can you explain the difference between a list and a tuple in Python? When would you use each one? Also, can you describe what a dictionary comprehension is and provide a simple example?",
+      intermediate:
+        "Your Python application is experiencing memory issues and slow performance when processing large datasets. How would you approach diagnosing and optimizing this? Discuss specific Python tools and techniques you would use, such as generators, memory profiling, or data structure choices. How would you handle concurrency in this scenario?",
+      advanced:
+        "You're designing a high-performance Python system that needs to handle real-time data processing with strict latency requirements. Describe your architecture approach, including choices between threading, multiprocessing, and asyncio. How would you handle shared state, error recovery, and ensure thread/process safety? Discuss trade-offs between different concurrency models and when to use each.",
+    },
+
+    java: {
+      beginner:
+        "Let's discuss Java basics. Can you explain the difference between an abstract class and an interface in Java? When would you use each? Also, can you describe what happens when you create a new object in Java, including memory allocation and initialization?",
+      intermediate:
+        "Your Java application is experiencing performance issues and memory leaks. How would you approach diagnosing these problems? Discuss JVM tuning, garbage collection strategies, and profiling tools you would use. How would you identify and fix memory leaks in a production environment?",
+      advanced:
+        "You're designing a high-throughput, concurrent Java system that needs to process thousands of requests per second with low latency. Describe your architecture approach, including thread pool management, synchronization strategies, and JVM tuning. How would you handle shared mutable state, ensure thread safety, and optimize for both throughput and latency? Discuss trade-offs between different concurrency patterns.",
+    },
+  };
+  */
+  /* eslint-enable */
+
+  // NOTE: Hardcoded questions are commented out above
+  // The system now uses LLM-generated questions via generateAllQuestions()
+  // This fallback is only used if question generation fails
+  
+  // Fallback question if LLM generation fails
+  const typeLabels: Record<InterviewType, string> = {
+    general: "technical interview",
+    frontend: "Front End Engineering",
+    backend: "Backend Engineering",
+    fullstack: "Fullstack Development",
+    data: "Data Engineering",
+    python: "Python programming",
+    java: "Java programming",
+  };
+  
+  const difficultyLabels: Record<string, string> = {
+    beginner: "fundamental concepts",
+    intermediate: "practical experience",
+    advanced: "advanced technical challenges",
+  };
+  
+  return `I'd like to start by understanding your background in ${typeLabels[type]}. Can you tell me about your experience with ${difficultyLabels[difficulty]} in this field? What projects or challenges have you worked on that demonstrate your skills?`;
 }

@@ -46,7 +46,7 @@ export function useLiveAPI({
 
   const [connected, setConnected] = useState(false);
   const [config, setConfig] = useState<LiveConfig>({
-    model: "models/gemini-2.0-flash-exp",
+    model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
   });
   const [volume, setVolume] = useState(0);
 
