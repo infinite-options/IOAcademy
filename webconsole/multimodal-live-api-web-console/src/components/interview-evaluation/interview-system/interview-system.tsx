@@ -70,6 +70,9 @@ const InterviewSystem: React.FC = () => {
   const [questionGenerationError, setQuestionGenerationError] = useState<
     string | null
   >(null);
+  const [questionsAsked, setQuestionsAsked] = useState<number>(0);
+  const [showEndInterviewPopup, setShowEndInterviewPopup] = useState(false);
+  const endInterviewPopupShownRef = useRef(false);
 
   // Generate transcript from logs - memoized to avoid regenerating unnecessarily
   const generateTranscript = useCallback(() => {
@@ -237,6 +240,28 @@ const InterviewSystem: React.FC = () => {
           !isRequestingEvaluation
         ) {
           interviewStore.addMessage("interviewer", responseText);
+          
+          // Detect if this is a question being asked
+          const isQuestion = responseText.includes("?") || 
+            /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss)\b/i.test(responseText);
+          
+          // Exclude evaluation prompts
+          const isEvaluationPrompt = responseText.toLowerCase().includes("evaluation") ||
+            responseText.toLowerCase().includes("assessment") ||
+            responseText.toLowerCase().includes("score:") ||
+            responseText.toLowerCase().includes("feedback");
+          
+          if (isQuestion && !isEvaluationPrompt) {
+            setQuestionsAsked(prev => {
+              const newCount = prev + 1;
+              console.log(`📊 Question ${newCount} asked`);
+              if (newCount >= 2 && !endInterviewPopupShownRef.current) { // select number of questions to ask before showing the popup
+                endInterviewPopupShownRef.current = true;
+                setShowEndInterviewPopup(true);
+              }
+              return newCount;
+            });
+          }
         }
 
         // If we're waiting for evaluation, capture this response
@@ -558,6 +583,10 @@ const InterviewSystem: React.FC = () => {
       const promptData = generateInterviewPrompt(interviewType, skillLevel, null);
       const initialQuestion = promptData.initialQuestion;
       
+      // Count the initial question
+      setQuestionsAsked(1);
+      console.log(`📊 Starting interview with question 1`);
+      
       client.send([{ text: "QUESTION TO ASK: " + initialQuestion }]);
       setInterviewStarted(true);
     }
@@ -573,6 +602,9 @@ const InterviewSystem: React.FC = () => {
     setShowTranscript(false);
     evaluationResponseRef.current = "";
     hasGeneratedTranscript.current = false;
+    setQuestionsAsked(0);
+    setShowEndInterviewPopup(false);
+    endInterviewPopupShownRef.current = false;
 
     // Reset the interview store
     interviewStore.resetInterview();
@@ -581,6 +613,31 @@ const InterviewSystem: React.FC = () => {
   const toggleTranscriptView = () => {
     setShowTranscript(!showTranscript);
   };
+
+  const requestEvaluation = useCallback(() => {
+    setIsRequestingEvaluation(true);
+    evaluationResponseRef.current = "";
+    hasGeneratedTranscript.current = false;
+    client.send([
+      {
+        text: `
+It's time to conclude this interview. Please provide a comprehensive evaluation of my performance with the following format:
+
+## TECHNICAL SKILLS ASSESSMENT
+[Score: X/10]
+[Detailed feedback with specific examples from my responses]
+
+## COMMUNICATION ASSESSMENT
+[Score: X/10] 
+[Feedback on clarity, engagement, and professionalism]
+
+## OVERALL FEEDBACK
+[Summary assessment and improvement recommendations]
+
+Please be specific and actionable in your feedback, referencing particular responses or techniques I demonstrated.`,
+      },
+    ]);
+  }, [client]);
 
   return (
     <div className="interview-system">
@@ -656,31 +713,7 @@ const InterviewSystem: React.FC = () => {
             </div>
             <button
               className="end-interview-button"
-              onClick={() => {
-                setIsRequestingEvaluation(true);
-                evaluationResponseRef.current = ""; // Reset previous evaluation content
-                hasGeneratedTranscript.current = false;
-                console.log("Requesting evaluation...");
-                client.send([
-                  {
-                    text: `
-It's time to conclude this interview. Please provide a comprehensive evaluation of my performance with the following format:
-
-## TECHNICAL SKILLS ASSESSMENT
-[Score: X/10]
-[Detailed feedback with specific examples from my responses]
-
-## COMMUNICATION ASSESSMENT
-[Score: X/10] 
-[Feedback on clarity, engagement, and professionalism]
-
-## OVERALL FEEDBACK
-[Summary assessment and improvement recommendations]
-
-Please be specific and actionable in your feedback, referencing particular responses or techniques I demonstrated.`,
-                  },
-                ]);
-              }}
+              onClick={requestEvaluation}
             >
               End Interview & Get Feedback
             </button>
@@ -688,6 +721,34 @@ Please be specific and actionable in your feedback, referencing particular respo
 
           {/* Show live transcript during the interview */}
           <InterviewTranscript />
+        </div>
+      )}
+
+      {showEndInterviewPopup && (
+        <div className="end-interview-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="end-interview-popup-title">
+          <div className="end-interview-popup">
+            <h2 id="end-interview-popup-title">End interview?</h2>
+            <p>You&apos;ve had 3 questions. Do you want to end the interview and get feedback?</p>
+            <div className="end-interview-popup-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => {
+                  setShowEndInterviewPopup(false);
+                  requestEvaluation();
+                }}
+              >
+                Yes, end interview
+              </button>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setShowEndInterviewPopup(false)}
+              >
+                No, continue
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
