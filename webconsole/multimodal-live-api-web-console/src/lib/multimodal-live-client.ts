@@ -19,8 +19,10 @@ import { EventEmitter } from "eventemitter3";
 import { difference } from "lodash";
 import {
   ClientContentMessage,
+  isInputTranscription,
   isInterrupted,
   isModelTurn,
+  isOutputTranscription,
   isServerContentMessage,
   isSetupCompleteMessage,
   isToolCallCancellationMessage,
@@ -48,6 +50,10 @@ interface MultimodalLiveClientEventTypes {
   close: (event: CloseEvent) => void;
   audio: (data: ArrayBuffer) => void;
   content: (data: ServerContent) => void;
+  /** Spoken text only (no chain of thought). Fired when outputAudioTranscription is enabled. */
+  outputTranscription: (text: string) => void;
+  /** User's speech as text. Fired when inputAudioTranscription is enabled. */
+  inputTranscription: (text: string) => void;
   interrupted: () => void;
   setupcomplete: () => void;
   turncomplete: () => void;
@@ -200,6 +206,22 @@ export class MultimodalLiveClient extends EventEmitter<MultimodalLiveClientEvent
         this.log("server.send", "turnComplete");
         this.emit("turncomplete");
         //plausible theres more to the message, continue
+      }
+
+      if (isOutputTranscription(serverContent)) {
+        const text = serverContent.outputTranscription.text?.trim();
+        if (text) {
+          this.emit("outputTranscription", text);
+          this.log("server.outputTranscription", text.substring(0, 80) + (text.length > 80 ? "…" : ""));
+        }
+      }
+
+      if (isInputTranscription(serverContent)) {
+        const text = serverContent.inputTranscription.text?.trim();
+        if (text) {
+          this.emit("inputTranscription", text);
+          this.log("server.inputTranscription", text.substring(0, 80) + (text.length > 80 ? "…" : ""));
+        }
       }
 
       if (isModelTurn(serverContent)) {

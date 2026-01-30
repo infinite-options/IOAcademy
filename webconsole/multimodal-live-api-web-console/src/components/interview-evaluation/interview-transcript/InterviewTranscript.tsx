@@ -11,14 +11,30 @@ interface Message {
 
 interface InterviewStoreState {
   messages: Message[];
+  pendingInterviewerContent: string;
+  pendingCandidateContent: string;
 }
 
 const InterviewTranscript: React.FC = () => {
-  const { messages } = useInterviewStore() as InterviewStoreState;
+  const {
+    messages,
+    pendingInterviewerContent,
+    pendingCandidateContent,
+  } = useInterviewStore() as InterviewStoreState;
 
-  if (messages.length === 0) {
+  const hasAnyContent =
+    messages.length > 0 ||
+    pendingInterviewerContent.length > 0 ||
+    pendingCandidateContent.length > 0;
+
+  if (!hasAnyContent) {
     return (
-      <div className="interview-transcript-empty">No transcript available.</div>
+      <div className="interview-transcript">
+        <h3>Interview Transcript</h3>
+        <div className="interview-transcript-empty">
+          No transcript available.
+        </div>
+      </div>
     );
   }
 
@@ -46,6 +62,30 @@ const InterviewTranscript: React.FC = () => {
             <div className="message-content">{message.content}</div>
           </div>
         ))}
+        {pendingCandidateContent ? (
+          <div
+            key="pending-candidate"
+            className="transcript-message candidate-message transcript-message--streaming"
+          >
+            <div className="message-header">
+              <span className="message-role">You</span>
+              <span className="message-time">...</span>
+            </div>
+            <div className="message-content">{pendingCandidateContent}</div>
+          </div>
+        ) : null}
+        {pendingInterviewerContent ? (
+          <div
+            key="pending-interviewer"
+            className="transcript-message interviewer-message transcript-message--streaming"
+          >
+            <div className="message-header">
+              <span className="message-role">Interviewer</span>
+              <span className="message-time">...</span>
+            </div>
+            <div className="message-content">{pendingInterviewerContent}</div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

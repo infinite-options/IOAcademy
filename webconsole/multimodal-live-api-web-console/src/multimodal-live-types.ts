@@ -39,6 +39,10 @@ export type LiveConfig = {
   systemInstruction?: { parts: Part[] };
   generationConfig?: Partial<LiveGenerationConfig>;
   tools?: Array<Tool | { googleSearch: {} } | { codeExecution: {} }>;
+  /** Enables transcription of the model's audio output (spoken text only). */
+  outputAudioTranscription?: Record<string, never>;
+  /** Enables transcription of the user's audio input (what the user said). */
+  inputAudioTranscription?: Record<string, never>;
 };
 
 export type LiveGenerationConfig = GenerationConfig & {
@@ -102,7 +106,22 @@ export type ServerContentMessage = {
   serverContent: ServerContent;
 };
 
-export type ServerContent = ModelTurn | TurnComplete | Interrupted;
+/** Output audio transcription: text the model actually spoke (no chain of thought). */
+export type OutputTranscriptionContent = {
+  outputTranscription: { text: string };
+};
+
+/** Input audio transcription: text the user actually spoke. */
+export type InputTranscriptionContent = {
+  inputTranscription: { text: string };
+};
+
+export type ServerContent =
+  | ModelTurn
+  | TurnComplete
+  | Interrupted
+  | OutputTranscriptionContent
+  | InputTranscriptionContent;
 
 export type ModelTurn = {
   modelTurn: {
@@ -188,6 +207,16 @@ export const isTurnComplete = (a: any): a is TurnComplete =>
 
 export const isInterrupted = (a: any): a is Interrupted =>
   (a as Interrupted).interrupted;
+
+export const isOutputTranscription = (
+  a: any,
+): a is OutputTranscriptionContent =>
+  typeof (a as OutputTranscriptionContent).outputTranscription?.text === "string";
+
+export const isInputTranscription = (
+  a: any,
+): a is InputTranscriptionContent =>
+  typeof (a as InputTranscriptionContent).inputTranscription?.text === "string";
 
 export function isToolCall(value: unknown): value is ToolCall {
   if (!value || typeof value !== "object") return false;

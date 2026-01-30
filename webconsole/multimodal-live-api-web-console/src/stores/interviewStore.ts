@@ -28,6 +28,10 @@ interface InterviewState {
 
   // Transcript
   messages: Message[];
+  /** In-progress interviewer text (streaming word-by-word in same bubble). */
+  pendingInterviewerContent: string;
+  /** In-progress candidate text (streaming word-by-word in same bubble). */
+  pendingCandidateContent: string;
 
   // Evaluation
   evaluationFeedback: string | null;
@@ -39,6 +43,10 @@ interface InterviewState {
   startInterview: () => void;
   endInterview: () => void;
   addMessage: (role: MessageRole, content: string) => void;
+  appendPendingInterviewer: (text: string) => void;
+  appendPendingCandidate: (text: string) => void;
+  flushPendingInterviewer: () => void;
+  flushPendingCandidate: () => void;
   setEvaluationFeedback: (feedback: string) => void;
   setScores: (scores: EvaluationScores) => void;
   resetInterview: () => void;
@@ -53,6 +61,8 @@ export const useInterviewStore = create<InterviewState>()(
       startTime: null,
       endTime: null,
       messages: [],
+      pendingInterviewerContent: "",
+      pendingCandidateContent: "",
       evaluationFeedback: null,
       scores: null,
 
@@ -65,6 +75,8 @@ export const useInterviewStore = create<InterviewState>()(
           startTime: Date.now(),
           endTime: null,
           messages: [],
+          pendingInterviewerContent: "",
+          pendingCandidateContent: "",
           evaluationFeedback: null,
           scores: null,
         }),
@@ -83,6 +95,44 @@ export const useInterviewStore = create<InterviewState>()(
           ],
         })),
 
+      appendPendingInterviewer: (text) =>
+        set((state) => ({
+          pendingInterviewerContent: (state.pendingInterviewerContent + (state.pendingInterviewerContent ? " " : "") + text).trim(),
+        })),
+
+      appendPendingCandidate: (text) =>
+        set((state) => ({
+          pendingCandidateContent: (state.pendingCandidateContent + (state.pendingCandidateContent ? " " : "") + text).trim(),
+        })),
+
+      flushPendingInterviewer: () =>
+        set((state) => {
+          const content = state.pendingInterviewerContent.trim();
+          if (!content)
+            return { pendingInterviewerContent: "" };
+          return {
+            messages: [
+              ...state.messages,
+              { role: "interviewer" as const, content, timestamp: Date.now() },
+            ],
+            pendingInterviewerContent: "",
+          };
+        }),
+
+      flushPendingCandidate: () =>
+        set((state) => {
+          const content = state.pendingCandidateContent.trim();
+          if (!content)
+            return { pendingCandidateContent: "" };
+          return {
+            messages: [
+              ...state.messages,
+              { role: "candidate" as const, content, timestamp: Date.now() },
+            ],
+            pendingCandidateContent: "",
+          };
+        }),
+
       setEvaluationFeedback: (feedback) =>
         set({ evaluationFeedback: feedback }),
 
@@ -93,12 +143,23 @@ export const useInterviewStore = create<InterviewState>()(
           startTime: null,
           endTime: null,
           messages: [],
+          pendingInterviewerContent: "",
+          pendingCandidateContent: "",
           evaluationFeedback: null,
           scores: null,
         }),
     }),
     {
-      name: "interview-storage", // unique name for localStorage
+      name: "interview-storage",
+      partialize: (state) => ({
+        interviewType: state.interviewType,
+        skillLevel: state.skillLevel,
+        startTime: state.startTime,
+        endTime: state.endTime,
+        messages: state.messages,
+        evaluationFeedback: state.evaluationFeedback,
+        scores: state.scores,
+      }),
     }
   )
 );

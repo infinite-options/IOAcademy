@@ -19,7 +19,7 @@ import { useInterviewStore } from "../../../stores/interviewStore";
 import InterviewTranscript from "../interview-transcript/InterviewTranscript";
 import "./interview-system.scss";
 import { transcribeAudioDeclaration } from "./transcriptionFunction";
-import { Tool } from "@google/generative-ai";
+import { Tool, GoogleGenerativeAI } from "@google/generative-ai";
 import {
   generateAllQuestions,
   saveQuestionBank,
@@ -29,6 +29,7 @@ import {
   type QuestionBank,
 } from "./questionGenerator";
 import { MultimodalLiveClient } from "../../../lib/multimodal-live-client";
+import { parseEvaluationScores } from "./utils/modelHelpers";
 
 // Define a type that includes functionDeclarations
 interface FunctionDeclarationTool {
@@ -41,7 +42,8 @@ function hasFunctionDeclarations(tool: any): tool is FunctionDeclarationTool {
 }
 
 const InterviewSystem: React.FC = () => {
-  const { client, connected, connect, config, setConfig } = useLiveAPIContext();
+  const { client, connected, connect, disconnect, config, setConfig } =
+    useLiveAPIContext();
   const { logs } = useLoggerStore();
   const interviewStore = useInterviewStore();
   const [interviewType, setInterviewType] = useState<InterviewType | null>(
@@ -71,60 +73,40 @@ const InterviewSystem: React.FC = () => {
     string | null
   >(null);
   const [questionsAsked, setQuestionsAsked] = useState<number>(0);
+  const [numQuestions, setNumQuestions] = useState<number>(3);
   const [showEndInterviewPopup, setShowEndInterviewPopup] = useState(false);
   const endInterviewPopupShownRef = useRef(false);
+  const hasSyncedCandidateFromLogsRef = useRef(false);
 
-  // Generate transcript from logs - memoized to avoid regenerating unnecessarily
+  // Generate transcript: sync candidate from logs (once), then build from store (spoken + candidate only; no modelTurn/chain of thought)
   const generateTranscript = useCallback(() => {
-    console.log("Generating transcript from logs:", logs.length);
-    let formattedTranscript = "# Interview Transcript\n\n";
-
-    logs.forEach((log) => {
-      const timestamp = log.date.toLocaleTimeString();
-
-      try {
-        // Handle user messages (client content)
-        if (isClientContentMessage(log.message)) {
-          const { turns } = log.message.clientContent;
-          turns.forEach((turn) => {
-            const userText = turn.parts
-              .filter((part) => part.text)
-              .map((part) => part.text)
-              .join(" ");
-
-            if (userText.trim()) {
-              formattedTranscript += `[${timestamp}] **Candidate:** ${userText}\n\n`;
-
-              // Also add to interview store for the transcript component
-              interviewStore.addMessage("candidate", userText);
-            }
-          });
-        }
-
-        // Handle model responses
-        if (
-          typeof log.message === "object" &&
-          "serverContent" in log.message &&
-          log.message.serverContent &&
-          "modelTurn" in log.message.serverContent
-        ) {
-          const modelText = log.message.serverContent.modelTurn.parts
-            .filter((part) => part.text)
-            .map((part) => part.text)
-            .join(" ");
-
-          if (modelText.trim()) {
-            formattedTranscript += `[${timestamp}] **Interviewer:** ${modelText}\n\n`;
-
-            // Also add to interview store for the transcript component
-            interviewStore.addMessage("interviewer", modelText);
+    if (!hasSyncedCandidateFromLogsRef.current) {
+      hasSyncedCandidateFromLogsRef.current = true;
+      logs.forEach((log) => {
+        try {
+          if (isClientContentMessage(log.message)) {
+            const { turns } = log.message.clientContent;
+            turns.forEach((turn) => {
+              const userText = turn.parts
+                .filter((part) => part.text)
+                .map((part) => part.text)
+                .join(" ")
+                .trim();
+              if (userText) interviewStore.addMessage("candidate", userText);
+            });
           }
+        } catch (err) {
+          console.error("Error processing log for transcript:", err);
         }
-      } catch (err) {
-        console.error("Error processing log entry:", err, log);
-      }
+      });
+    }
+    const messages = interviewStore.messages;
+    let formattedTranscript = "# Interview Transcript\n\n";
+    messages.forEach((m: { role: string; content: string; timestamp: number }) => {
+      const timestamp = new Date(m.timestamp).toLocaleTimeString();
+      const who = m.role === "candidate" ? "Candidate" : "Interviewer";
+      formattedTranscript += `[${timestamp}] **${who}:** ${m.content}\n\n`;
     });
-
     return formattedTranscript;
   }, [logs, interviewStore]);
 
@@ -182,13 +164,15 @@ const InterviewSystem: React.FC = () => {
         ];
       }
 
-      // Create and set the new config
+      // Create and set the new config (outputAudioTranscription = spoken text only, no chain of thought)
       const newConfig: LiveConfig = {
         ...config,
         systemInstruction: {
           parts: [{ text: prompt.systemPrompt }],
         },
         tools: updatedTools,
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
       };
 
       setConfig(newConfig);
@@ -199,6 +183,8 @@ const InterviewSystem: React.FC = () => {
         systemInstruction: {
           parts: [{ text: prompt.systemPrompt }],
         },
+        outputAudioTranscription: {},
+        inputAudioTranscription: {},
       });
     }
   }, [prompt, config, setConfig]);
@@ -233,14 +219,13 @@ const InterviewSystem: React.FC = () => {
           .map((part: { text?: string }) => part.text || "")
           .join("");
 
-        // Add interviewer response to the interview store in real-time
+        // Do NOT add modelTurn text to transcript (it can include chain of thought).
+        // Interviewer text is added from "outputTranscription" (spoken text only).
         if (
           responseText.trim() &&
           interviewStarted &&
           !isRequestingEvaluation
         ) {
-          interviewStore.addMessage("interviewer", responseText);
-          
           // Detect if this is a question being asked
           const isQuestion = responseText.includes("?") || 
             /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss)\b/i.test(responseText);
@@ -255,7 +240,7 @@ const InterviewSystem: React.FC = () => {
             setQuestionsAsked(prev => {
               const newCount = prev + 1;
               console.log(`📊 Question ${newCount} asked`);
-              if (newCount >= 2 && !endInterviewPopupShownRef.current) { // select number of questions to ask before showing the popup
+              if (newCount >= numQuestions && !endInterviewPopupShownRef.current) {
                 endInterviewPopupShownRef.current = true;
                 setShowEndInterviewPopup(true);
               }
@@ -479,6 +464,39 @@ const InterviewSystem: React.FC = () => {
     */
   };
 
+  // Stream outputTranscription word-by-word into same bubble; flush candidate when model starts, flush both on turncomplete
+  useEffect(() => {
+    const handleOutputTranscription = (text: string) => {
+      if (interviewStarted && !isRequestingEvaluation && text.trim()) {
+        interviewStore.flushPendingCandidate();
+        interviewStore.appendPendingInterviewer(text.trim());
+      }
+    };
+    const handleTurnCompleteForBuffers = () => {
+      interviewStore.flushPendingCandidate();
+      interviewStore.flushPendingInterviewer();
+    };
+    client.on("outputTranscription", handleOutputTranscription);
+    client.on("turncomplete", handleTurnCompleteForBuffers);
+    return () => {
+      client.off("outputTranscription", handleOutputTranscription);
+      client.off("turncomplete", handleTurnCompleteForBuffers);
+    };
+  }, [client, interviewStore, interviewStarted, isRequestingEvaluation]);
+
+  // Stream inputTranscription word-by-word into same bubble; flush when model starts or on turncomplete
+  useEffect(() => {
+    const handleInputTranscription = (text: string) => {
+      if (interviewStarted && !isRequestingEvaluation && text.trim()) {
+        interviewStore.appendPendingCandidate(text.trim());
+      }
+    };
+    client.on("inputTranscription", handleInputTranscription);
+    return () => {
+      client.off("inputTranscription", handleInputTranscription);
+    };
+  }, [client, interviewStore, interviewStarted, isRequestingEvaluation]);
+
   // Add a handler for tool calls
   useEffect(() => {
     const handleToolCall = (toolCall: ToolCall) => {
@@ -605,8 +623,9 @@ const InterviewSystem: React.FC = () => {
     setQuestionsAsked(0);
     setShowEndInterviewPopup(false);
     endInterviewPopupShownRef.current = false;
+    hasSyncedCandidateFromLogsRef.current = false;
 
-    // Reset the interview store
+    // Reset the interview store (clears pending content too)
     interviewStore.resetInterview();
   };
 
@@ -614,30 +633,118 @@ const InterviewSystem: React.FC = () => {
     setShowTranscript(!showTranscript);
   };
 
-  const requestEvaluation = useCallback(() => {
-    setIsRequestingEvaluation(true);
-    evaluationResponseRef.current = "";
-    hasGeneratedTranscript.current = false;
-    client.send([
-      {
-        text: `
-It's time to conclude this interview. Please provide a comprehensive evaluation of my performance with the following format:
+  const requestEvaluation = useCallback(async () => {
+    try {
+      setIsRequestingEvaluation(true);
+
+      // Close the live interview WebSocket – we're done with the voice model
+      if (connected) {
+        await disconnect();
+      }
+
+      // Build a transcript from the current interview store messages
+      const messages = interviewStore.messages;
+      let transcriptText = "# Interview Transcript\n\n";
+
+      messages.forEach((m) => {
+        const timestamp = new Date(m.timestamp).toLocaleTimeString();
+        const who = m.role === "candidate" ? "Candidate" : "Interviewer";
+        transcriptText += `[${timestamp}] **${who}:** ${m.content}\n\n`;
+      });
+
+      // Store transcript locally for the Transcript tab
+      setInterviewTranscript(transcriptText);
+      hasGeneratedTranscript.current = true;
+
+      const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+      if (!apiKey) {
+        console.error("REACT_APP_GEMINI_API_KEY not found");
+        throw new Error("Missing API key for evaluation model");
+      }
+
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({
+        model: "models/gemini-3-flash-preview",
+      });
+
+      const interviewTypeLabel =
+        interviewType === "frontend"
+          ? "Front End Engineering"
+          : interviewType === "backend"
+          ? "Backend Engineering"
+          : interviewType === "fullstack"
+          ? "Fullstack Development"
+          : interviewType === "data"
+          ? "Data Engineering"
+          : interviewType === "python"
+          ? "Python Programming"
+          : interviewType === "java"
+          ? "Java Programming"
+          : "General Technical";
+
+      const levelLabel =
+        skillLevel !== null ? `${skillLevel}/10` : "unspecified level";
+
+      const evaluationPrompt = `
+You are an expert technical interview evaluator.
+
+You will receive the full transcript of a live technical interview between an AI interviewer and a human candidate.
+
+- Interview type: ${interviewTypeLabel}
+- Candidate self-reported skill level: ${levelLabel}
+
+Your job is to read the entire transcript carefully and then provide a structured evaluation of the candidate's performance.
+
+TRANSCRIPT (markdown format):
+
+${transcriptText}
+
+Now provide a comprehensive evaluation of the candidate with the following exact structure and headings:
 
 ## TECHNICAL SKILLS ASSESSMENT
-[Score: X/10]
-[Detailed feedback with specific examples from my responses]
+Score: X/10
+[Detailed feedback with specific examples from the transcript]
 
 ## COMMUNICATION ASSESSMENT
-[Score: X/10] 
-[Feedback on clarity, engagement, and professionalism]
+Score: X/10
+[Feedback on clarity, engagement, and professionalism, with examples]
 
 ## OVERALL FEEDBACK
-[Summary assessment and improvement recommendations]
+[Summary assessment and specific improvement recommendations]
 
-Please be specific and actionable in your feedback, referencing particular responses or techniques I demonstrated.`,
-      },
-    ]);
-  }, [client]);
+CRITICAL:
+- Use the exact section headings above.
+- Always include a numeric score out of 10 in both assessment sections.
+- Reference specific moments or themes from the transcript in your feedback.
+`;
+
+      const result = await model.generateContent([{ text: evaluationPrompt }]);
+      const responseText = result.response.text();
+
+      setEvaluationFeedback(responseText);
+      interviewStore.setEvaluationFeedback(responseText);
+
+      const parsedScores = parseEvaluationScores(responseText);
+      if (parsedScores) {
+        interviewStore.setScores(parsedScores);
+      }
+
+      interviewStore.endInterview();
+    } catch (error) {
+      console.error("Error during evaluation with gemini-3-flash-preview:", error);
+      setEvaluationFeedback(
+        "Sorry, we were unable to generate an evaluation. Please try again in a moment."
+      );
+    } finally {
+      setIsRequestingEvaluation(false);
+    }
+  }, [
+    connected,
+    disconnect,
+    interviewStore,
+    interviewType,
+    skillLevel,
+  ]);
 
   return (
     <div className="interview-system">
@@ -671,13 +778,29 @@ Please be specific and actionable in your feedback, referencing particular respo
             <p>
               <strong>Starting Difficulty Level:</strong> {skillLevel}/10
             </p>
+            <p>
+              <strong>Number of questions:</strong>{" "}
+              <select
+                value={numQuestions}
+                onChange={(e) => setNumQuestions(Number(e.target.value))}
+                className="num-questions-select"
+                aria-label="Number of questions"
+              >
+                {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </p>
           </div>
 
           <p className="instructions">
-            When you click "Start Interview", the system will begin with
+            When you click &quot;Start Interview&quot;, the system will begin with
             questions appropriate for your selected skill level. The AI
-            interviewer will adjust difficulty based on your responses. At the
-            end, you'll receive a comprehensive evaluation of your performance.
+            interviewer will ask up to {numQuestions} question{numQuestions === 1 ? "" : "s"} before
+            offering to end the interview. You can also end early with the button below. At the
+            end, you&apos;ll receive a comprehensive evaluation of your performance.
           </p>
 
           <div className="action-buttons">
@@ -728,7 +851,7 @@ Please be specific and actionable in your feedback, referencing particular respo
         <div className="end-interview-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="end-interview-popup-title">
           <div className="end-interview-popup">
             <h2 id="end-interview-popup-title">End interview?</h2>
-            <p>You&apos;ve had 3 questions. Do you want to end the interview and get feedback?</p>
+            <p>You&apos;ve had {questionsAsked} question{questionsAsked === 1 ? "" : "s"}. Do you want to end the interview and get feedback?</p>
             <div className="end-interview-popup-actions">
               <button
                 type="button"

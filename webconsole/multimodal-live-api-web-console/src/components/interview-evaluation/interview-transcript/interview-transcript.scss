@@ -57,6 +57,20 @@
     line-height: 1.5;
   }
 
+  .transcript-message--streaming .message-content {
+    display: inline;
+    &::after {
+      content: "▌";
+      animation: transcript-cursor-blink 1s step-end infinite;
+      margin-left: 1px;
+      color: var(--Neutral-60, #80868b);
+    }
+  }
+
+  @keyframes transcript-cursor-blink {
+    50% { opacity: 0; }
+  }
+
   .interview-transcript-empty {
     padding: 20px;
     text-align: center;
