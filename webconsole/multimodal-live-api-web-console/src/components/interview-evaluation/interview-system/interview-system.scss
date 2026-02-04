@@ -2,6 +2,10 @@
 .interview-system {
   width: 100%;
   height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  max-width: 100vw;
 
   .interview-preparation {
     max-width: 800px;
@@ -10,6 +14,18 @@
     background-color: var(--Neutral-10);
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    overflow-y: auto;
+    box-sizing: border-box;
+    width: 100%;
+
+    @media (max-width: 768px) {
+      padding: 1rem;
+      margin: 0;
+      max-width: 100%;
+      width: 100%;
+      margin-top: 1rem;
+      margin-bottom: 1rem;
+    }
 
     h2 {
       text-align: center;
@@ -22,9 +38,26 @@
       padding: 1rem;
       background-color: var(--Neutral-20);
       border-radius: 4px;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
+
+      @media (max-width: 768px) {
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+      }
 
       p {
         margin-bottom: 0.5rem;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        max-width: 100%;
+
+        @media (max-width: 768px) {
+          font-size: 0.9rem;
+          margin-bottom: 0.75rem;
+        }
+
         &:last-child {
           margin-bottom: 0;
         }
@@ -32,6 +65,7 @@
 
       strong {
         color: var(--Neutral-90);
+        display: inline-block;
       }
 
       .num-questions-select {
@@ -42,6 +76,15 @@
         border: 1px solid var(--Neutral-40, #dadce0);
         background: var(--Neutral-10, #fff);
         color: var(--Neutral-90, #202124);
+        box-sizing: border-box;
+
+        @media (max-width: 768px) {
+          margin-left: 0.25rem;
+          padding: 0.3rem 0.4rem;
+          font-size: 0.9rem;
+          width: auto;
+          max-width: calc(100% - 0.5rem);
+        }
       }
     }
 
@@ -49,17 +92,37 @@
       margin-bottom: 2rem;
       line-height: 1.6;
       color: var(--Neutral-80);
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+
+      @media (max-width: 768px) {
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
     }
 
     .action-buttons {
       display: flex;
       justify-content: space-between;
+      gap: 1rem;
+
+      @media (max-width: 768px) {
+        flex-direction: column;
+        width: 100%;
+      }
 
       button {
         padding: 0.75rem 1.5rem;
         font-size: 1rem;
         border-radius: 4px;
         cursor: pointer;
+        flex: 1;
+
+        @media (max-width: 768px) {
+          width: 100%;
+          padding: 0.875rem 1rem;
+        }
       }
 
       .secondary-button {
@@ -87,6 +150,74 @@
   .interview-in-progress {
     width: 100%;
     height: 100%;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+
+    .evaluation-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.75);
+      border-radius: 8px;
+    }
+
+    .evaluation-loading-content {
+      text-align: center;
+      padding: 2rem;
+      max-width: 360px;
+
+      @media (max-width: 768px) {
+        padding: 1.5rem;
+        max-width: calc(100% - 2rem);
+      }
+    }
+
+    .evaluation-loading-spinner {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 1.5rem;
+      border: 4px solid var(--Neutral-30);
+      border-top-color: #4285f4;
+      border-radius: 50%;
+      animation: evaluation-spin 0.9s linear infinite;
+    }
+
+    .evaluation-loading-title {
+      font-size: 1.35rem;
+      font-weight: 600;
+      color: var(--Neutral-90);
+      margin: 0 0 0.5rem;
+
+      @media (max-width: 768px) {
+        font-size: 1.15rem;
+      }
+    }
+
+    .evaluation-loading-message {
+      font-size: 1rem;
+      color: var(--Neutral-80);
+      margin: 0 0 0.5rem;
+
+      @media (max-width: 768px) {
+        font-size: 0.9rem;
+      }
+    }
+
+    .evaluation-loading-hint {
+      font-size: 0.875rem;
+      color: var(--Neutral-60);
+      margin: 0;
+
+      @media (max-width: 768px) {
+        font-size: 0.8rem;
+      }
+    }
 
     .interview-header {
       display: flex;
@@ -96,6 +227,17 @@
       background-color: var(--Neutral-20);
       border-bottom: 1px solid var(--Neutral-30);
       margin-bottom: 1rem;
+      flex-shrink: 0;
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 100%;
+
+      @media (max-width: 768px) {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: stretch;
+        padding: 0.75rem;
+      }
 
       .interview-type {
         font-weight: 600;
@@ -104,6 +246,15 @@
         padding: 0.5rem 1rem;
         border-radius: 4px;
         display: inline-block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+
+        @media (max-width: 768px) {
+          text-align: center;
+          max-width: 100%;
+        }
       }
 
       .end-interview-button {
@@ -114,9 +265,19 @@
         border: none;
         border-radius: 4px;
         cursor: pointer;
+        white-space: nowrap;
 
-        &:hover {
+        @media (max-width: 768px) {
+          width: 100%;
+        }
+
+        &:hover:not(:disabled) {
           background-color: #d32f2f;
+        }
+
+        &:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
       }
     }
@@ -211,17 +372,38 @@
     border-radius: 8px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     max-width: 420px;
+    margin: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    box-sizing: border-box;
+    width: calc(100% - 2rem);
+
+    @media (max-width: 768px) {
+      padding: 1.5rem;
+      max-width: calc(100% - 2rem);
+      width: calc(100% - 2rem);
+      margin: 1rem;
+    }
 
     h2 {
       margin: 0 0 0.75rem 0;
       font-size: 1.25rem;
       color: var(--Neutral-90);
+
+      @media (max-width: 768px) {
+        font-size: 1.1rem;
+      }
     }
 
     p {
       margin: 0;
       line-height: 1.5;
       color: var(--Neutral-80);
+      word-wrap: break-word;
+
+      @media (max-width: 768px) {
+        font-size: 0.9rem;
+      }
     }
   }
 
@@ -230,6 +412,13 @@
     gap: 1rem;
     margin-top: 1.5rem;
     justify-content: flex-end;
+
+    @media (max-width: 768px) {
+      flex-direction: column;
+      button {
+        width: 100%;
+      }
+    }
 
     button {
       padding: 0.6rem 1.2rem;
@@ -274,6 +463,17 @@
   margin: 0 auto;
   max-height: 80vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+
+  @media (max-width: 768px) {
+    padding: 1rem;
+    max-height: calc(100vh - 2rem);
+    margin: 0;
+    border-radius: 4px;
+    width: 100%;
+    max-width: 100%;
+  }
 }
 
 .evaluation-tabs {
@@ -310,11 +510,25 @@
 .evaluation-feedback-container,
 .transcript-container {
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+
+  @media (max-width: 768px) {
+    padding: 0;
+  }
 
   h2 {
     margin-bottom: 1.5rem;
     font-size: 1.5rem;
     color: var(--Neutral-90);
+
+    @media (max-width: 768px) {
+      font-size: 1.25rem;
+      margin-bottom: 1rem;
+      padding: 0 0.5rem;
+    }
   }
 
   h3 {
@@ -322,6 +536,12 @@
     margin-bottom: 0.5rem;
     font-size: 1.1rem;
     color: var(--Blue-500);
+
+    @media (max-width: 768px) {
+      font-size: 1rem;
+      margin-top: 1rem;
+      padding: 0 0.5rem;
+    }
   }
 
   .score-line {
@@ -329,11 +549,24 @@
     font-weight: bold;
     color: var(--Green-500);
     margin-bottom: 1rem;
+    word-wrap: break-word;
+
+    @media (max-width: 768px) {
+      font-size: 1rem;
+      padding: 0 0.5rem;
+    }
   }
 
   p {
     margin-bottom: 0.75rem;
     line-height: 1.5;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+
+    @media (max-width: 768px) {
+      font-size: 0.9rem;
+      padding: 0 0.5rem;
+    }
   }
 
   .feedback-content,
@@ -341,7 +574,13 @@
     width: 100%;
     max-height: 50vh;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 1rem;
+
+    @media (max-width: 768px) {
+      max-height: 60vh;
+      padding-right: 0.5rem;
+    }
 
     &::-webkit-scrollbar {
       width: 6px;
@@ -402,12 +641,24 @@
   margin-top: 2rem;
   width: 100%;
 
+  @media (max-width: 768px) {
+    margin-top: 1.5rem;
+    padding: 0 1rem;
+  }
+
   .primary-button,
   .secondary-button {
     padding: 0.75rem 1.5rem;
     font-size: 1rem;
     border-radius: 4px;
     cursor: pointer;
+
+    @media (max-width: 768px) {
+      padding: 0.875rem 1rem;
+      font-size: 0.95rem;
+      width: 100%;
+      max-width: 100%;
+    }
   }
 
   .primary-button {
@@ -429,5 +680,11 @@
     &:hover {
       background-color: rgba(66, 133, 244, 0.2);
     }
+  }
+}
+
+@keyframes evaluation-spin {
+  to {
+    transform: rotate(360deg);
   }
 }

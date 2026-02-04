@@ -29,9 +29,13 @@ const filterOptions = [
   { value: "none", label: "All" },
 ];
 
-export default function SidePanel() {
+interface SidePanelProps {
+  onClose?: () => void;
+}
+
+export default function SidePanel({ onClose }: SidePanelProps) {
   const { connected, client } = useLiveAPIContext();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(true); // Start open when component mounts (since it's lazy loaded)
   const loggerRef = useRef<HTMLDivElement>(null);
   const loggerLastHeightRef = useRef<number>(-1);
   const { log, logs } = useLoggerStore();
@@ -77,7 +81,16 @@ export default function SidePanel() {
       <header className="top">
         <h2>Console</h2>
         {open ? (
-          <button className="opener" onClick={() => setOpen(false)}>
+          <button
+            className="opener"
+            onClick={() => {
+              setOpen(false);
+              // Notify parent to unmount this component
+              if (onClose) {
+                onClose();
+              }
+            }}
+          >
             <RiSidebarFoldLine color="#b4b8bb" />
           </button>
         ) : (

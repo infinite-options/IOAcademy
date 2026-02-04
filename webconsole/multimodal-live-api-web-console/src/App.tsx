@@ -1,13 +1,14 @@
 // Modified src/App.tsx
 
-import { useRef, useState } from "react";
+import { useRef, useState, Suspense, lazy } from "react";
 import "./App.scss";
 import { LiveAPIProvider } from "./contexts/LiveAPIContext";
-import SidePanel from "./components/side-panel/SidePanel";
-import { Altair } from "./components/altair/Altair";
 import ControlTray from "./components/control-tray/ControlTray";
 import InterviewEvaluation from "./components/interview-evaluation/interview-system/interview-system";
-import cn from "classnames";
+import { RiSidebarUnfoldLine } from "react-icons/ri";
+
+// Lazy load SidePanel component
+const SidePanel = lazy(() => import("./components/side-panel/SidePanel"));
 
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY as string;
 if (typeof API_KEY !== "string") {
@@ -19,58 +20,38 @@ const uri = `wss://${host}/ws/google.ai.generativelanguage.v1alpha.GenerativeSer
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
-  const [activeTab, setActiveTab] = useState<"interview" | "evaluation">(
-    "interview"
-  );
+  const [showSidePanel, setShowSidePanel] = useState(false);
 
   return (
     <div className="App">
       <LiveAPIProvider url={uri} apiKey={API_KEY}>
         <div className="streaming-console">
-          <SidePanel />
+          {/* Toggle button - always visible */}
+          {!showSidePanel && (
+            <button
+              className="side-panel-toggle-button"
+              onClick={() => setShowSidePanel(true)}
+              aria-label="Open console panel"
+            >
+              <RiSidebarUnfoldLine color="#b4b8bb" />
+            </button>
+          )}
+          
+          {/* Lazy loaded SidePanel - only rendered when showSidePanel is true */}
+          {showSidePanel && (
+            <Suspense fallback={<div className="side-panel-loading">Loading console...</div>}>
+              <SidePanel onClose={() => setShowSidePanel(false)} />
+            </Suspense>
+          )}
+          
           <main>
-            <div className="tab-selector">
-              <button
-                className={cn("tab-button", {
-                  active: activeTab === "interview",
-                })}
-                onClick={() => setActiveTab("interview")}
-              >
-                Video
-              </button>
-              <button
-                className={cn("tab-button", {
-                  active: activeTab === "evaluation",
-                })}
-                onClick={() => setActiveTab("evaluation")}
-              >
-                Interview
-              </button>
-            </div>
-
             <div className="main-app-area">
-              {activeTab === "interview" ? (
-                <>
-                  <Altair />
-                  <video
-                    className={cn("stream", {
-                      hidden: !videoRef.current || !videoStream,
-                    })}
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                  />
-                </>
-              ) : (
-                <InterviewEvaluation />
-              )}
+              <InterviewEvaluation />
             </div>
 
             <ControlTray
               videoRef={videoRef}
-              supportsVideo={true}
-              onVideoStreamChange={setVideoStream}
+              supportsVideo={false}
             >
               {/* put your own buttons here */}
             </ControlTray>

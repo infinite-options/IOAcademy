@@ -47,6 +47,12 @@ export function useLiveAPI({
   const [connected, setConnected] = useState(false);
   const [config, setConfig] = useState<LiveConfig>({
     model: "models/gemini-2.5-flash-native-audio-preview-12-2025",
+    generationConfig: {
+      responseModalities: "audio",
+      speechConfig: {
+        voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+      },
+    },
   });
   const [volume, setVolume] = useState(0);
 

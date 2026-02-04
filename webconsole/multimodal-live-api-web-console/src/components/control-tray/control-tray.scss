@@ -104,7 +104,7 @@
 }
 
 .control-tray {
-  position: absolute;
+  position: sticky;
   bottom: 0;
   left: 50%;
   transform: translate(-50%, 0);
@@ -112,7 +112,9 @@
   justify-content: center;
   align-items: flex-start;
   gap: 8px;
-  padding-bottom: 18px;
+  padding: 18px 0;
+  z-index: 100;
+  background: transparent;
 
   .disabled .action-button,
   .action-button.disabled {

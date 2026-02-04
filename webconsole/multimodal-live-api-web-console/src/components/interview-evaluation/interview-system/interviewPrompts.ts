@@ -8,12 +8,15 @@ export interface InterviewPrompt {
 }
 
 // Generate appropriate system prompt based on interview type and skill level
+// numQuestions: user-selected count; internally we ask numQuestions + 1 (one more than intended)
 export function generateInterviewPrompt(
   type: InterviewType,
   skillLevel: SkillLevel,
-  questionBank?: QuestionBank | null
+  questionBank?: QuestionBank | null,
+  numQuestions: number = 3
 ): InterviewPrompt {
-  const basePrompt = getBasePrompt(type);
+  const questionLimit = numQuestions + 1; // Ask one more than user intends
+  const basePrompt = getBasePrompt(type, questionLimit);
   const levelAdjustedPrompt = adjustPromptForLevel(basePrompt, skillLevel);
   
   // Use generated initial question if available, otherwise use fallback
@@ -83,15 +86,16 @@ CRITICAL INSTRUCTIONS FOR USING PRE-GENERATED QUESTIONS:
 }
 
 // Base prompts for each interview type
-function getBasePrompt(type: InterviewType): string {
+// questionLimit: number of questions to ask (already numQuestions + 1 from caller)
+function getBasePrompt(type: InterviewType, questionLimit: number = 4): string {
   const promptPrefix = `You are conducting a technical interview. Your role is to ASK QUESTIONS to the candidate and evaluate their responses. This is a SHORT, 5-MINUTE INTERVIEW FORMAT.
 
  IMPORTANT: 
 - Never say "Question to ask"
 - Always start with an overview of the interview format, introduce yourself
 - When you receive a message that starts with "QUESTION TO ASK:", understand that this is a question you should present to the candidate, not answer yourself.
-- Limit yourself to 3-4 focused questions total to respect the 5-minute format.
-- After 3-4 question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
+- Limit yourself to ${questionLimit} focused questions total to respect the 5-minute format.
+- After ${questionLimit} question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
 
   - Your evaluation MUST follow this exact format:
   
@@ -170,7 +174,9 @@ FINAL EVALUATION STRUCTURE:
       );
 
     case "frontend":
-      return `You are a technical interviewer specializing in Front End Engineering. Your task is to evaluate candidates on their understanding of front-end technologies, frameworks, and best practices.
+      return `You are conducting a technical interview. Limit yourself to ${questionLimit} focused questions total. After ${questionLimit} question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
+
+You are a technical interviewer specializing in Front End Engineering. Your task is to evaluate candidates on their understanding of front-end technologies, frameworks, and best practices.
 
 KEY ASSESSMENT AREAS:
 

@@ -76,7 +76,9 @@ const InterviewSystem: React.FC = () => {
   const [numQuestions, setNumQuestions] = useState<number>(3);
   const [showEndInterviewPopup, setShowEndInterviewPopup] = useState(false);
   const endInterviewPopupShownRef = useRef(false);
+  const modelTurnsCompletedRef = useRef(0);
   const hasSyncedCandidateFromLogsRef = useRef(false);
+  const lastProcessedPromptRef = useRef<string | null>(null);
 
   // Generate transcript: sync candidate from logs (once), then build from store (spoken + candidate only; no modelTurn/chain of thought)
   const generateTranscript = useCallback(() => {
@@ -110,9 +112,29 @@ const InterviewSystem: React.FC = () => {
     return formattedTranscript;
   }, [logs, interviewStore]);
 
+  // Regenerate prompt when numQuestions changes (user can change it on setup screen)
+  useEffect(() => {
+    if (interviewInProgress && interviewType && skillLevel) {
+      const generatedPrompt = generateInterviewPrompt(
+        interviewType,
+        skillLevel,
+        null,
+        numQuestions
+      );
+      setPrompt(generatedPrompt);
+    }
+  }, [interviewInProgress, interviewType, skillLevel, numQuestions]);
+
   // New useEffect to handle configuration with transcribeAudioDeclaration
   useEffect(() => {
     if (!prompt) return;
+
+    // Check if the prompt has already been applied to avoid infinite loops
+    const currentSystemPrompt = config.systemInstruction?.parts?.[0]?.text || "";
+    if (currentSystemPrompt === prompt.systemPrompt) {
+      // Prompt is already applied, no need to update
+      return;
+    }
 
     // Get existing tools or initialize empty array
     const existingTools = config.tools || [];
@@ -165,17 +187,26 @@ const InterviewSystem: React.FC = () => {
       }
 
       // Create and set the new config (outputAudioTranscription = spoken text only, no chain of thought)
+      // Audio-native model requires responseModalities + speechConfig for voice output
       const newConfig: LiveConfig = {
         ...config,
         systemInstruction: {
           parts: [{ text: prompt.systemPrompt }],
         },
         tools: updatedTools,
+        generationConfig: {
+          ...config.generationConfig,
+          responseModalities: "audio",
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+          },
+        },
         outputAudioTranscription: {},
         inputAudioTranscription: {},
       };
 
       setConfig(newConfig);
+      lastProcessedPromptRef.current = prompt.systemPrompt;
     } else {
       // Just update the system prompt if we already have the function declaration
       setConfig({
@@ -183,9 +214,17 @@ const InterviewSystem: React.FC = () => {
         systemInstruction: {
           parts: [{ text: prompt.systemPrompt }],
         },
+        generationConfig: {
+          ...config.generationConfig,
+          responseModalities: "audio",
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Aoede" } },
+          },
+        },
         outputAudioTranscription: {},
         inputAudioTranscription: {},
       });
+      lastProcessedPromptRef.current = prompt.systemPrompt;
     }
   }, [prompt, config, setConfig]);
 
@@ -219,36 +258,7 @@ const InterviewSystem: React.FC = () => {
           .map((part: { text?: string }) => part.text || "")
           .join("");
 
-        // Do NOT add modelTurn text to transcript (it can include chain of thought).
-        // Interviewer text is added from "outputTranscription" (spoken text only).
-        if (
-          responseText.trim() &&
-          interviewStarted &&
-          !isRequestingEvaluation
-        ) {
-          // Detect if this is a question being asked
-          const isQuestion = responseText.includes("?") || 
-            /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss)\b/i.test(responseText);
-          
-          // Exclude evaluation prompts
-          const isEvaluationPrompt = responseText.toLowerCase().includes("evaluation") ||
-            responseText.toLowerCase().includes("assessment") ||
-            responseText.toLowerCase().includes("score:") ||
-            responseText.toLowerCase().includes("feedback");
-          
-          if (isQuestion && !isEvaluationPrompt) {
-            setQuestionsAsked(prev => {
-              const newCount = prev + 1;
-              console.log(`📊 Question ${newCount} asked`);
-              if (newCount >= numQuestions && !endInterviewPopupShownRef.current) {
-                endInterviewPopupShownRef.current = true;
-                setShowEndInterviewPopup(true);
-              }
-              return newCount;
-            });
-          }
-        }
-
+        // Question counting is done in turnComplete handler (using spoken text only).
         // If we're waiting for evaluation, capture this response
         if (isRequestingEvaluation) {
           evaluationResponseRef.current += responseText;
@@ -464,7 +474,18 @@ const InterviewSystem: React.FC = () => {
     */
   };
 
+  // Helper: is this spoken text a question (not evaluation)?
+  const isSpokenQuestion = useCallback((text: string) => {
+    const t = text.trim();
+    if (!t) return false;
+    const hasQuestion = t.includes("?") ||
+      /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss)\b/i.test(t);
+    const isEval = /evaluation|assessment|score:|feedback/i.test(t);
+    return hasQuestion && !isEval;
+  }, []);
+
   // Stream outputTranscription word-by-word into same bubble; flush candidate when model starts, flush both on turncomplete
+  // Count questions here (once per turn, using spoken text only) instead of in modelTurn (which streams and can include chain of thought)
   useEffect(() => {
     const handleOutputTranscription = (text: string) => {
       if (interviewStarted && !isRequestingEvaluation && text.trim()) {
@@ -473,6 +494,24 @@ const InterviewSystem: React.FC = () => {
       }
     };
     const handleTurnCompleteForBuffers = () => {
+      const pending = useInterviewStore.getState().pendingInterviewerContent?.trim() || "";
+      modelTurnsCompletedRef.current += 1;
+      if (
+        interviewStarted &&
+        !isRequestingEvaluation &&
+        modelTurnsCompletedRef.current > 1 &&
+        isSpokenQuestion(pending)
+      ) {
+        setQuestionsAsked((prev) => {
+          const newCount = prev + 1;
+          console.log(`📊 Question ${newCount} asked (from spoken text)`);
+          if (newCount >= numQuestions + 1 && !endInterviewPopupShownRef.current) {
+            endInterviewPopupShownRef.current = true;
+            setShowEndInterviewPopup(true);
+          }
+          return newCount;
+        });
+      }
       interviewStore.flushPendingCandidate();
       interviewStore.flushPendingInterviewer();
     };
@@ -482,7 +521,7 @@ const InterviewSystem: React.FC = () => {
       client.off("outputTranscription", handleOutputTranscription);
       client.off("turncomplete", handleTurnCompleteForBuffers);
     };
-  }, [client, interviewStore, interviewStarted, isRequestingEvaluation]);
+  }, [client, interviewStore, interviewStarted, isRequestingEvaluation, isSpokenQuestion, numQuestions]);
 
   // Stream inputTranscription word-by-word into same bubble; flush when model starts or on turncomplete
   useEffect(() => {
@@ -598,7 +637,7 @@ const InterviewSystem: React.FC = () => {
     // Start the interview with the initial question
     // QUESTION GENERATOR DISABLED: Always use fallback question
     if (interviewType && skillLevel) {
-      const promptData = generateInterviewPrompt(interviewType, skillLevel, null);
+      const promptData = generateInterviewPrompt(interviewType, skillLevel, null, numQuestions);
       const initialQuestion = promptData.initialQuestion;
       
       // Count the initial question
@@ -623,7 +662,9 @@ const InterviewSystem: React.FC = () => {
     setQuestionsAsked(0);
     setShowEndInterviewPopup(false);
     endInterviewPopupShownRef.current = false;
+    modelTurnsCompletedRef.current = 0;
     hasSyncedCandidateFromLogsRef.current = false;
+    lastProcessedPromptRef.current = null;
 
     // Reset the interview store (clears pending content too)
     interviewStore.resetInterview();
@@ -798,7 +839,7 @@ CRITICAL:
           <p className="instructions">
             When you click &quot;Start Interview&quot;, the system will begin with
             questions appropriate for your selected skill level. The AI
-            interviewer will ask up to {numQuestions} question{numQuestions === 1 ? "" : "s"} before
+            interviewer will ask up to {numQuestions + 1} question{numQuestions === 0 ? "" : "s"} before
             offering to end the interview. You can also end early with the button below. At the
             end, you&apos;ll receive a comprehensive evaluation of your performance.
           </p>
@@ -816,6 +857,20 @@ CRITICAL:
 
       {interviewStarted && !evaluationFeedback && (
         <div className="interview-in-progress">
+          {/* Loading overlay when evaluation is being generated */}
+          {isRequestingEvaluation && (
+            <div className="evaluation-loading-overlay" role="status" aria-live="polite">
+              <div className="evaluation-loading-content">
+                <div className="evaluation-loading-spinner" aria-hidden="true" />
+                <h2 className="evaluation-loading-title">Interview complete</h2>
+                <p className="evaluation-loading-message">
+                  Generating your evaluation and feedback…
+                </p>
+                <p className="evaluation-loading-hint">This usually takes a few seconds.</p>
+              </div>
+            </div>
+          )}
+
           <div className="interview-header">
             <div className="interview-type">
               {interviewType === "general"
@@ -837,6 +892,7 @@ CRITICAL:
             <button
               className="end-interview-button"
               onClick={requestEvaluation}
+              disabled={isRequestingEvaluation}
             >
               End Interview & Get Feedback
             </button>

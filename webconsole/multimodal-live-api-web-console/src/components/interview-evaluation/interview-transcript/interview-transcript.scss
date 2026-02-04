@@ -16,7 +16,12 @@
   .transcript-messages {
     max-height: 400px;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 0;
+
+    @media (max-width: 768px) {
+      max-height: calc(100vh - 200px);
+    }
   }
 
   .transcript-message {
