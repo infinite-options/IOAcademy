@@ -84,3 +84,21 @@ export function base64ToArrayBuffer(base64: string) {
   }
   return bytes.buffer;
 }
+
+// Basic feature detection helpers
+export function isAudioWorkletSupported(): boolean {
+  try {
+    // Guard against SSR / non-browser environments
+    if (typeof window === "undefined" || typeof AudioContext === "undefined") {
+      return false;
+    }
+    return "audioWorklet" in AudioContext.prototype;
+  } catch {
+    return false;
+  }
+}
+
+export function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+}

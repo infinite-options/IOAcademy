@@ -97,7 +97,15 @@ function ControlTray({
       ]);
     };
     if (connected && !muted && audioRecorder) {
-      audioRecorder.on("data", onData).on("volume", setInVolume).start();
+      audioRecorder.on("data", onData).on("volume", setInVolume);
+      audioRecorder
+        .start()
+        .catch((err) => {
+          console.error(
+            "[ControlTray] Failed to start audio recorder, voice input disabled:",
+            err,
+          );
+        });
     } else {
       audioRecorder.stop();
     }

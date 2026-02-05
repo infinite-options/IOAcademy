@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { audioContext } from "./utils";
+import { audioContext, isAudioWorkletSupported } from "./utils";
 import AudioRecordingWorklet from "./worklets/audio-processing";
 import VolMeterWorket from "./worklets/vol-meter";
 
@@ -36,8 +36,9 @@ export class AudioRecorder extends EventEmitter {
   audioContext: AudioContext | undefined;
   source: MediaStreamAudioSourceNode | undefined;
   recording: boolean = false;
-  recordingWorklet: AudioWorkletNode | undefined;
-  vuWorklet: AudioWorkletNode | undefined;
+  // Can be an AudioWorkletNode (modern browsers) or a ScriptProcessorNode (fallback)
+  recordingWorklet: AudioNode | undefined;
+  vuWorklet: AudioNode | undefined;
 
   private starting: Promise<void> | null = null;
 
@@ -51,43 +52,100 @@ export class AudioRecorder extends EventEmitter {
     }
 
     this.starting = new Promise(async (resolve, reject) => {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.audioContext = await audioContext({ sampleRate: this.sampleRate });
-      this.source = this.audioContext.createMediaStreamSource(this.stream);
+      try {
+        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.audioContext = await audioContext({ sampleRate: this.sampleRate });
+        this.source = this.audioContext.createMediaStreamSource(this.stream);
 
-      const workletName = "audio-recorder-worklet";
-      const src = createWorketFromSrc(workletName, AudioRecordingWorklet);
+        if (isAudioWorkletSupported()) {
+          // High‑fidelity path: use AudioWorklet for recording + VU meter
+          const workletName = "audio-recorder-worklet";
+          const src = createWorketFromSrc(workletName, AudioRecordingWorklet);
 
-      await this.audioContext.audioWorklet.addModule(src);
-      this.recordingWorklet = new AudioWorkletNode(
-        this.audioContext,
-        workletName,
-      );
+          await this.audioContext.audioWorklet.addModule(src);
+          this.recordingWorklet = new AudioWorkletNode(
+            this.audioContext,
+            workletName,
+          );
 
-      this.recordingWorklet.port.onmessage = async (ev: MessageEvent) => {
-        // worklet processes recording floats and messages converted buffer
-        const arrayBuffer = ev.data.data.int16arrayBuffer;
+          (this.recordingWorklet as AudioWorkletNode).port.onmessage = async (
+            ev: MessageEvent,
+          ) => {
+            // worklet processes recording floats and messages converted buffer
+            const arrayBuffer = ev.data.data.int16arrayBuffer;
 
-        if (arrayBuffer) {
-          const arrayBufferString = arrayBufferToBase64(arrayBuffer);
-          this.emit("data", arrayBufferString);
+            if (arrayBuffer) {
+              const arrayBufferString = arrayBufferToBase64(arrayBuffer);
+              this.emit("data", arrayBufferString);
+            }
+          };
+          this.source.connect(this.recordingWorklet);
+
+          // vu meter worklet
+          const vuWorkletName = "vu-meter";
+          await this.audioContext.audioWorklet.addModule(
+            createWorketFromSrc(vuWorkletName, VolMeterWorket),
+          );
+          this.vuWorklet = new AudioWorkletNode(
+            this.audioContext,
+            vuWorkletName,
+          );
+          (this.vuWorklet as AudioWorkletNode).port.onmessage = (
+            ev: MessageEvent,
+          ) => {
+            this.emit("volume", ev.data.volume);
+          };
+
+          this.source.connect(this.vuWorklet);
+        } else {
+          // Fallback path: use ScriptProcessorNode for recording + VU meter.
+          // Note: ScriptProcessorNode is deprecated but widely supported,
+          // including on older iOS Safari where AudioWorklet is unavailable.
+          const bufferSize = 4096;
+          const processor = this.audioContext.createScriptProcessor(
+            bufferSize,
+            1,
+            1,
+          );
+          this.recordingWorklet = processor;
+
+          processor.onaudioprocess = (event: AudioProcessingEvent) => {
+            const input = event.inputBuffer.getChannelData(0);
+            const len = input.length;
+            if (!len) return;
+
+            // Convert floats (-1..1) to PCM16
+            const int16Buffer = new ArrayBuffer(len * 2);
+            const view = new DataView(int16Buffer);
+            let sumSquares = 0;
+            for (let i = 0; i < len; i++) {
+              let s = input[i];
+              // clamp
+              if (s > 1) s = 1;
+              else if (s < -1) s = -1;
+              const int16 = s < 0 ? s * 0x8000 : s * 0x7fff;
+              view.setInt16(i * 2, int16, true);
+              sumSquares += s * s;
+            }
+
+            const arrayBufferString = arrayBufferToBase64(int16Buffer);
+            this.emit("data", arrayBufferString);
+
+            // Simple RMS volume estimate for VU meter
+            const rms = Math.sqrt(sumSquares / len);
+            this.emit("volume", rms);
+          };
+
+          this.source.connect(processor);
+          processor.connect(this.audioContext.destination);
         }
-      };
-      this.source.connect(this.recordingWorklet);
 
-      // vu meter worklet
-      const vuWorkletName = "vu-meter";
-      await this.audioContext.audioWorklet.addModule(
-        createWorketFromSrc(vuWorkletName, VolMeterWorket),
-      );
-      this.vuWorklet = new AudioWorkletNode(this.audioContext, vuWorkletName);
-      this.vuWorklet.port.onmessage = (ev: MessageEvent) => {
-        this.emit("volume", ev.data.volume);
-      };
-
-      this.source.connect(this.vuWorklet);
-      this.recording = true;
-      resolve();
+        this.recording = true;
+        resolve();
+      } catch (err) {
+        this.starting = null;
+        reject(err);
+      }
       this.starting = null;
     });
   }

@@ -21,7 +21,7 @@ import {
 } from "../lib/multimodal-live-client";
 import { LiveConfig } from "../multimodal-live-types";
 import { AudioStreamer } from "../lib/audio-streamer";
-import { audioContext } from "../lib/utils";
+import { audioContext, isAudioWorkletSupported } from "../lib/utils";
 import VolMeterWorket from "../lib/worklets/vol-meter";
 
 export type UseLiveAPIResults = {
@@ -61,13 +61,23 @@ export function useLiveAPI({
     if (!audioStreamerRef.current) {
       audioContext({ id: "audio-out" }).then((audioCtx: AudioContext) => {
         audioStreamerRef.current = new AudioStreamer(audioCtx);
-        audioStreamerRef.current
-          .addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
-            setVolume(ev.data.volume);
-          })
-          .then(() => {
-            // Successfully added worklet
-          });
+        // Only register the VU‑meter worklet when supported;
+        // playback itself does not require AudioWorklet.
+        if (isAudioWorkletSupported()) {
+          audioStreamerRef.current
+            .addWorklet<any>("vumeter-out", VolMeterWorket, (ev: any) => {
+              setVolume(ev.data.volume);
+            })
+            .then(() => {
+              // Successfully added worklet
+            })
+            .catch((err) => {
+              console.warn(
+                "[useLiveAPI] Failed to add vumeter AudioWorklet; continuing without volume meter.",
+                err,
+              );
+            });
+        }
       });
     }
   }, [audioStreamerRef]);
