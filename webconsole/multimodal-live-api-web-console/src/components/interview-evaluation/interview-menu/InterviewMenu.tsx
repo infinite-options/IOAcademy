@@ -53,7 +53,7 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
 
   return (
     <div className="interview-menu">
-      <h2>Technical Interview System</h2>
+      <h2>Technical Interview System v1</h2>
 
       {!selectedCategory && (
         <div className="interview-category-selection">

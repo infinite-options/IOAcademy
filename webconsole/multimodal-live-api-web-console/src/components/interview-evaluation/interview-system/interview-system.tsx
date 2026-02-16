@@ -1,5 +1,6 @@
 // Updated src/components/interview-evaluation/interview-system/interview-system.tsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useLiveAPIContext } from "../../../contexts/LiveAPIContext";
 import InterviewMenu, {
   InterviewType,
@@ -76,6 +77,7 @@ const InterviewSystem: React.FC = () => {
   const [numQuestions, setNumQuestions] = useState<number>(3);
   const [showEndInterviewPopup, setShowEndInterviewPopup] = useState(false);
   const endInterviewPopupShownRef = useRef(false);
+  const waitingForLastAnswerRef = useRef(false);
   const modelTurnsCompletedRef = useRef(0);
   const hasSyncedCandidateFromLogsRef = useRef(false);
   const lastProcessedPromptRef = useRef<string | null>(null);
@@ -479,8 +481,8 @@ const InterviewSystem: React.FC = () => {
     const t = text.trim();
     if (!t) return false;
     const hasQuestion = t.includes("?") ||
-      /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss)\b/i.test(t);
-    const isEval = /evaluation|assessment|score:|feedback/i.test(t);
+      /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss|give me|talk about|think about)\b/i.test(t);
+    const isEval = /evaluation|assessment|score:|feedback|## TECHNICAL|## COMMUNICATION|## OVERALL/i.test(t);
     return hasQuestion && !isEval;
   }, []);
 
@@ -494,20 +496,37 @@ const InterviewSystem: React.FC = () => {
       }
     };
     const handleTurnCompleteForBuffers = () => {
-      const pending = useInterviewStore.getState().pendingInterviewerContent?.trim() || "";
+      const state = useInterviewStore.getState();
+      const pendingCandidate = state.pendingCandidateContent?.trim() || "";
+      const pendingInterviewer = state.pendingInterviewerContent?.trim() || "";
+
+      // Show popup when user has answered the Nth question (candidate content arrives via inputTranscription → flush)
+      if (
+        interviewStarted &&
+        !isRequestingEvaluation &&
+        pendingCandidate &&
+        waitingForLastAnswerRef.current &&
+        !endInterviewPopupShownRef.current
+      ) {
+        waitingForLastAnswerRef.current = false;
+        endInterviewPopupShownRef.current = true;
+        setShowEndInterviewPopup(true);
+        console.log("📊 End-interview popup shown (user answered last question)");
+      }
+
       modelTurnsCompletedRef.current += 1;
       if (
         interviewStarted &&
         !isRequestingEvaluation &&
         modelTurnsCompletedRef.current > 1 &&
-        isSpokenQuestion(pending)
+        isSpokenQuestion(pendingInterviewer)
       ) {
         setQuestionsAsked((prev) => {
           const newCount = prev + 1;
           console.log(`📊 Question ${newCount} asked (from spoken text)`);
-          if (newCount >= numQuestions + 1 && !endInterviewPopupShownRef.current) {
-            endInterviewPopupShownRef.current = true;
-            setShowEndInterviewPopup(true);
+          if (newCount >= numQuestions && !endInterviewPopupShownRef.current) {
+            waitingForLastAnswerRef.current = true;
+            console.log("📊 Waiting for user to answer last question");
           }
           return newCount;
         });
@@ -528,6 +547,13 @@ const InterviewSystem: React.FC = () => {
     const handleInputTranscription = (text: string) => {
       if (interviewStarted && !isRequestingEvaluation && text.trim()) {
         interviewStore.appendPendingCandidate(text.trim());
+        // Show popup as soon as user starts answering the last question
+        if (waitingForLastAnswerRef.current && !endInterviewPopupShownRef.current) {
+          waitingForLastAnswerRef.current = false;
+          endInterviewPopupShownRef.current = true;
+          setShowEndInterviewPopup(true);
+          console.log("📊 End-interview popup shown (user started answering last question)");
+        }
       }
     };
     client.on("inputTranscription", handleInputTranscription);
@@ -561,6 +587,13 @@ const InterviewSystem: React.FC = () => {
 
             // Add the transcription to the interview store
             interviewStore.addMessage("candidate", transcription);
+
+            // Show end-interview popup when user has answered the Nth question
+            if (waitingForLastAnswerRef.current && !endInterviewPopupShownRef.current) {
+              waitingForLastAnswerRef.current = false;
+              endInterviewPopupShownRef.current = true;
+              setShowEndInterviewPopup(true);
+            }
 
             // Respond to the tool call
             client.sendToolResponse({
@@ -662,6 +695,7 @@ const InterviewSystem: React.FC = () => {
     setQuestionsAsked(0);
     setShowEndInterviewPopup(false);
     endInterviewPopupShownRef.current = false;
+    waitingForLastAnswerRef.current = false;
     modelTurnsCompletedRef.current = 0;
     hasSyncedCandidateFromLogsRef.current = false;
     lastProcessedPromptRef.current = null;
@@ -839,7 +873,7 @@ CRITICAL:
           <p className="instructions">
             When you click &quot;Start Interview&quot;, the system will begin with
             questions appropriate for your selected skill level. The AI
-            interviewer will ask up to {numQuestions + 1} question{numQuestions === 0 ? "" : "s"} before
+            interviewer will ask up to {numQuestions} question{numQuestions === 1 ? "" : "s"} before
             offering to end the interview. You can also end early with the button below. At the
             end, you&apos;ll receive a comprehensive evaluation of your performance.
           </p>
@@ -903,33 +937,37 @@ CRITICAL:
         </div>
       )}
 
-      {showEndInterviewPopup && (
-        <div className="end-interview-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="end-interview-popup-title">
-          <div className="end-interview-popup">
-            <h2 id="end-interview-popup-title">End interview?</h2>
-            <p>You&apos;ve had {questionsAsked} question{questionsAsked === 1 ? "" : "s"}. Do you want to end the interview and get feedback?</p>
-            <div className="end-interview-popup-actions">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={() => {
-                  setShowEndInterviewPopup(false);
-                  requestEvaluation();
-                }}
-              >
-                Yes, end interview
-              </button>
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => setShowEndInterviewPopup(false)}
-              >
-                No, continue
-              </button>
+      {showEndInterviewPopup &&
+        createPortal(
+          <div className="interview-system">
+            <div className="end-interview-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="end-interview-popup-title">
+              <div className="end-interview-popup">
+                <h2 id="end-interview-popup-title">End interview?</h2>
+                <p>You&apos;ve had {questionsAsked} question{questionsAsked === 1 ? "" : "s"}. Do you want to end the interview and get feedback?</p>
+                <div className="end-interview-popup-actions">
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => {
+                      setShowEndInterviewPopup(false);
+                      requestEvaluation();
+                    }}
+                  >
+                    Yes, end interview
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => setShowEndInterviewPopup(false)}
+                  >
+                    No, continue
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {evaluationFeedback && (
         <div className="evaluation-results-container">

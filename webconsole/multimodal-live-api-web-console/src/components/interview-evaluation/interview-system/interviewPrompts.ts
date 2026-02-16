@@ -8,14 +8,14 @@ export interface InterviewPrompt {
 }
 
 // Generate appropriate system prompt based on interview type and skill level
-// numQuestions: user-selected count; internally we ask numQuestions + 1 (one more than intended)
+// numQuestions: user-selected count; we ask exactly this many questions
 export function generateInterviewPrompt(
   type: InterviewType,
   skillLevel: SkillLevel,
   questionBank?: QuestionBank | null,
   numQuestions: number = 3
 ): InterviewPrompt {
-  const questionLimit = numQuestions + 1; // Ask one more than user intends
+  const questionLimit = numQuestions;
   const basePrompt = getBasePrompt(type, questionLimit);
   const levelAdjustedPrompt = adjustPromptForLevel(basePrompt, skillLevel);
   
@@ -86,9 +86,9 @@ CRITICAL INSTRUCTIONS FOR USING PRE-GENERATED QUESTIONS:
 }
 
 // Base prompts for each interview type
-// questionLimit: number of questions to ask (already numQuestions + 1 from caller)
+// questionLimit: number of questions to ask (equals numQuestions)
 function getBasePrompt(type: InterviewType, questionLimit: number = 4): string {
-  const promptPrefix = `You are conducting a technical interview. Your role is to ASK QUESTIONS to the candidate and evaluate their responses. This is a SHORT, 5-MINUTE INTERVIEW FORMAT.
+  const promptPrefix = `You are conducting a technical interview. Your role is to ASK QUESTIONS to the candidate and evaluate their responses.
 
  IMPORTANT: 
 - Never say "Question to ask"
