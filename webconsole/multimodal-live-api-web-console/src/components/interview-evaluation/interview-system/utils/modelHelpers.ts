@@ -192,6 +192,12 @@ function getInterviewTypeLabel(type: InterviewType): string {
       return "Fullstack Developer";
     case "data":
       return "Data Engineer";
+    case "hvac":
+      return "HVAC Technician";
+    case "python":
+      return "Python Programming";
+    case "java":
+      return "Java Programming";
     default:
       return "Technical";
   }

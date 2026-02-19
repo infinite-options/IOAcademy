@@ -43,6 +43,7 @@ function createQuestionGeneratorPrompt(
     backend: "Backend Engineering position",
     fullstack: "Fullstack Development position",
     data: "Data Engineering position",
+    hvac: "HVAC Technician position",
     python: "Python programming interview",
     java: "Java programming interview",
   }[type];

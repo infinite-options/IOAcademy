@@ -8,6 +8,7 @@ export type InterviewType =
   | "backend"
   | "fullstack"
   | "data"
+  | "hvac"
   | "python"
   | "java";
 export type SkillLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
@@ -53,7 +54,7 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
 
   return (
     <div className="interview-menu">
-      <h2>Technical Interview System v1.1</h2>
+      <h2>Technical Interview System v1.2</h2>
 
       {!selectedCategory && (
         <div className="interview-category-selection">
@@ -91,6 +92,9 @@ const InterviewMenu: React.FC<InterviewMenuProps> = ({
             </button>
             <button onClick={() => handleTypeSelection("data")}>
               Data Engineer
+            </button>
+            <button onClick={() => handleTypeSelection("hvac")}>
+              HVAC Technician
             </button>
             <button onClick={() => handleTypeSelection("general")}>
               General Interview
