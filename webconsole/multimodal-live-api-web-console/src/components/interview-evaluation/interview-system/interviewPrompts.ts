@@ -92,7 +92,7 @@ function getBasePrompt(type: InterviewType, questionLimit: number = 4): string {
 
  IMPORTANT: 
 - Never say "Question to ask"
-- Always start with an overview of the interview format, introduce yourself
+- Always start with an overview of the interview format, introduce yourself as "Gemini" or simply as the interviewer
 - When you receive a message that starts with "QUESTION TO ASK:", understand that this is a question you should present to the candidate, not answer yourself.
 - Limit yourself to ${questionLimit} focused questions total to respect the 5-minute format.
 - After ${questionLimit} question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
@@ -119,6 +119,21 @@ function getBasePrompt(type: InterviewType, questionLimit: number = 4): string {
 - Example: If you hear "I prefer functional components", you MUST call add_candidate_response with the text "I prefer functional components".
 - NEVER skip this step - it is essential for the interview process.
 - If you don't call this function, the candidate's responses won't be recorded properly.
+
+RESPONSE FORMATTING - TRANSCRIPT RESTATEMENT:
+- Before answering each question or responding to the candidate, you MUST first restate what the user said in clean, properly formatted text.
+- Wrap the user's transcribed response in <user_transcript> tags.
+- CRITICAL: The <user_transcript> section should ONLY appear in your text output, NOT in your spoken audio response.
+- When speaking, skip over the <user_transcript> section entirely - do not read it aloud.
+- Example format:
+  <user_transcript>
+  I prefer using functional components because they're more concise and easier to test.
+  </user_transcript>
+  
+  [Your interview response here]
+- This restatement should be clean, properly formatted, and accurately reflect what the candidate said.
+- Do this BEFORE every response where you're addressing something the candidate said.
+- Remember: Include <user_transcript> in text only, speak only your actual interview response.
 `;
 
   switch (type) {
@@ -173,19 +188,18 @@ FINAL EVALUATION STRUCTURE:
 5. Suggested learning resources or next steps`
       );
 
+  //     1. HTML & Accessibility
+  //  • Semantic HTML usage and proper document structure
+  //  • ARIA attributes and accessibility compliance (WCAG)
+  //  • SEO considerations and metadata optimization
+  //  • Progressive enhancement and graceful degradation
+  //  • Responsive design principles and mobile-first approach
     case "frontend":
-      return `You are conducting a technical interview. Limit yourself to ${questionLimit} focused questions total. After ${questionLimit} question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
-
-You are a technical interviewer specializing in Front End Engineering. Your task is to evaluate candidates on their understanding of front-end technologies, frameworks, and best practices.
+      return (
+        promptPrefix +
+        `You are a technical interviewer specializing in Front End Engineering. Your task is to evaluate candidates on their understanding of front-end technologies, frameworks, and best practices.
 
 KEY ASSESSMENT AREAS:
-
-1. HTML & Accessibility
-   • Semantic HTML usage and proper document structure
-   • ARIA attributes and accessibility compliance (WCAG)
-   • SEO considerations and metadata optimization
-   • Progressive enhancement and graceful degradation
-   • Responsive design principles and mobile-first approach
 
 2. CSS & Visual Implementation
    • Modern layout techniques (Flexbox, Grid, Container Queries)
@@ -206,7 +220,6 @@ KEY ASSESSMENT AREAS:
 4. Frameworks & Libraries
    • Component architecture and lifecycle understanding
    • State management approaches (local, global, server state)
-   • Rendering strategies (CSR, SSR, SSG, ISR)
    • Virtual DOM and reconciliation understanding
    • Hooks patterns and custom hook design
    • Framework-specific optimization techniques
@@ -237,7 +250,8 @@ EVALUATION APPROACH:
 - Probe for real-world experience versus theoretical knowledge
 - Evaluate understanding of performance implications
 - Test ability to reason about component architecture
-- Assess awareness of accessibility requirements`;
+- Assess awareness of accessibility requirements`
+      );
 
     case "backend":
       return (

@@ -491,8 +491,36 @@ const InterviewSystem: React.FC = () => {
   useEffect(() => {
     const handleOutputTranscription = (text: string) => {
       if (interviewStarted && !isRequestingEvaluation && text.trim()) {
-        interviewStore.flushPendingCandidate();
-        interviewStore.appendPendingInterviewer(text.trim());
+        // Check if this text contains <user_transcript> tags and extract them
+        const userTranscriptMatch = text.match(/<user_transcript>([\s\S]*?)<\/user_transcript>/);
+        
+        if (userTranscriptMatch) {
+          // Extract the user transcript content
+          const userTranscript = userTranscriptMatch[1].trim();
+          
+          // Remove the <user_transcript> tags from the model's response
+          const modelResponse = text.replace(/<user_transcript>[\s\S]*?<\/user_transcript>\s*/g, '').trim();
+          
+          // Replace the live transcription with the corrected one
+          // Clear any pending candidate content (live transcription) and replace with corrected version
+          if (userTranscript) {
+            console.log("📝 Extracted user transcript, replacing live transcription:", userTranscript);
+            // Clear the pending candidate content (live transcription) - this removes it from the bubble
+            interviewStore.clearPendingCandidate();
+            // Add the corrected transcript as a candidate message - this shows in the user's bubble
+            interviewStore.addMessage("candidate", userTranscript);
+          }
+          
+          // Add only the model's response (without user transcript) to interviewer
+          if (modelResponse) {
+            interviewStore.appendPendingInterviewer(modelResponse);
+          }
+        } else {
+          // No user transcript in this text - model is responding but hasn't included user transcript yet
+          // Don't flush pendingCandidate yet - keep showing live transcription until corrected version arrives
+          // Just add the model's response
+          interviewStore.appendPendingInterviewer(text.trim());
+        }
       }
     };
     const handleTurnCompleteForBuffers = () => {
@@ -531,7 +559,12 @@ const InterviewSystem: React.FC = () => {
           return newCount;
         });
       }
-      interviewStore.flushPendingCandidate();
+      // Only flush pendingCandidateContent if it hasn't been replaced by a corrected transcript
+      // The corrected transcript from <user_transcript> already cleared pendingCandidateContent
+      // So if there's still pending content, it means no corrected transcript arrived - flush it
+      if (pendingCandidate.trim()) {
+        interviewStore.flushPendingCandidate();
+      }
       interviewStore.flushPendingInterviewer();
     };
     client.on("outputTranscription", handleOutputTranscription);
@@ -652,9 +685,28 @@ const InterviewSystem: React.FC = () => {
   }, [client, interviewStore, pendingAudioTimestamp]);
 
   const startInterview = async () => {
-    if (!connected) {
-      await connect();
+    // Always disconnect and reconnect to ensure we have the latest config/prompt
+    // This is necessary because the WebSocket connection uses the config from when it was established
+    if (connected) {
+      await disconnect();
     }
+    
+    // Ensure prompt is set with current interview type and level BEFORE connecting
+    // This ensures the useEffect processes it and updates the config
+    if (interviewType && skillLevel) {
+      const promptData = generateInterviewPrompt(interviewType, skillLevel, null, numQuestions);
+      console.log("🔧 [START INTERVIEW] Setting prompt for:", interviewType, "level", skillLevel);
+      console.log("🔧 [START INTERVIEW] Prompt includes user_transcript:", promptData.systemPrompt.includes("<user_transcript>"));
+      setPrompt(promptData);
+      // Wait for React to process the state update and useEffect to run
+      // This ensures config.systemInstruction is updated before we connect
+      await new Promise(resolve => setTimeout(resolve, 200));
+      console.log("🔧 [START INTERVIEW] Config after prompt update:", config.systemInstruction?.parts?.[0]?.text?.includes("<user_transcript>"));
+    }
+
+    // Now connect with the updated config (which includes the new prompt with user_transcript instructions)
+    console.log("🔧 [START INTERVIEW] Connecting with config that includes user_transcript:", config.systemInstruction?.parts?.[0]?.text?.includes("<user_transcript>"));
+    await connect();
 
     // Reset evaluation data from previous interviews
     setEvaluationFeedback(null);

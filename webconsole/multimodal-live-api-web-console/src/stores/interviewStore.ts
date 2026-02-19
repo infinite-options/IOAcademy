@@ -47,6 +47,7 @@ interface InterviewState {
   appendPendingCandidate: (text: string) => void;
   flushPendingInterviewer: () => void;
   flushPendingCandidate: () => void;
+  clearPendingCandidate: () => void;
   setEvaluationFeedback: (feedback: string) => void;
   setScores: (scores: EvaluationScores) => void;
   resetInterview: () => void;
@@ -132,6 +133,9 @@ export const useInterviewStore = create<InterviewState>()(
             pendingCandidateContent: "",
           };
         }),
+
+      clearPendingCandidate: () =>
+        set({ pendingCandidateContent: "" }),
 
       setEvaluationFeedback: (feedback) =>
         set({ evaluationFeedback: feedback }),
