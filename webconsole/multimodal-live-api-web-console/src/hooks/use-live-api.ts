@@ -106,12 +106,47 @@ export function useLiveAPI({
   }, [client]);
 
   const connect = useCallback(async () => {
-    console.log(config);
+    console.log("🔧 [CONNECT] Connecting with config:", config);
+    console.log("🔧 [CONNECT] Config tools:", JSON.stringify(config.tools, null, 2));
     if (!config) {
       throw new Error("config has not been set");
     }
     client.disconnect();
+    
+    // Wait for both WebSocket connection AND setupComplete before marking as connected
+    // This ensures the server is ready to receive audio before we start sending
+    // This fixes the bug where first user response isn't registered
+    let setupCompleteResolved = false;
+    const setupCompletePromise = new Promise<void>((resolve) => {
+      const onSetupComplete = () => {
+        setupCompleteResolved = true;
+        console.log("✅ [CONNECT] setupComplete received, connection is ready");
+        client.off("setupcomplete", onSetupComplete);
+        resolve();
+      };
+      // Register listener BEFORE connecting to catch setupComplete if it fires quickly
+      client.on("setupcomplete", onSetupComplete);
+    });
+    
+    console.log("🔧 [CONNECT] Calling client.connect()...");
     await client.connect(config);
+    console.log("🔧 [CONNECT] WebSocket opened, waiting for setupComplete...");
+    
+    // Wait for setupComplete with a timeout to prevent hanging
+    // If setupComplete already fired, the promise resolves immediately
+    await Promise.race([
+      setupCompletePromise,
+      new Promise<void>((resolve) => {
+        setTimeout(() => {
+          if (!setupCompleteResolved) {
+            console.warn("⚠️ [CONNECT] setupComplete not received within 5 seconds, proceeding anyway");
+            resolve();
+          }
+        }, 5000);
+      }),
+    ]);
+    
+    console.log("✅ [CONNECT] Connection fully ready, setting connected=true");
     setConnected(true);
   }, [client, setConnected, config]);
 

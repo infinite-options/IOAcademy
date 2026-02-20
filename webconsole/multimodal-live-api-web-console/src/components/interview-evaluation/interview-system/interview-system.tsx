@@ -1,6 +1,5 @@
 // Updated src/components/interview-evaluation/interview-system/interview-system.tsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { useLiveAPIContext } from "../../../contexts/LiveAPIContext";
 import InterviewMenu, {
   InterviewType,
@@ -42,6 +41,20 @@ function hasFunctionDeclarations(tool: any): tool is FunctionDeclarationTool {
   return "functionDeclarations" in tool;
 }
 
+function textIndicatesInterviewConcluded(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("interview is concluded") ||
+    lower.includes("the interview is concluded") ||
+    lower.includes("interview concluded") ||
+    lower.includes("interview has concluded") ||
+    lower.includes("that concludes the interview") ||
+    lower.includes("this concludes the interview") ||
+    lower.includes("we have concluded the interview") ||
+    lower.includes("concludes the interview")
+  );
+}
+
 const InterviewSystem: React.FC = () => {
   const { client, connected, connect, disconnect, config, setConfig } =
     useLiveAPIContext();
@@ -73,14 +86,13 @@ const InterviewSystem: React.FC = () => {
   const [questionGenerationError, setQuestionGenerationError] = useState<
     string | null
   >(null);
-  const [questionsAsked, setQuestionsAsked] = useState<number>(0);
   const [numQuestions, setNumQuestions] = useState<number>(3);
-  const [showEndInterviewPopup, setShowEndInterviewPopup] = useState(false);
-  const endInterviewPopupShownRef = useRef(false);
-  const waitingForLastAnswerRef = useRef(false);
-  const modelTurnsCompletedRef = useRef(0);
   const hasSyncedCandidateFromLogsRef = useRef(false);
   const lastProcessedPromptRef = useRef<string | null>(null);
+  const interviewConcludedTriggeredRef = useRef(false);
+  const currentTurnTextRef = useRef("");
+  const currentSpokenTurnRef = useRef("");
+  const requestEvaluationRef = useRef<(() => Promise<void>) | null>(null);
 
   // Generate transcript: sync candidate from logs (once), then build from store (spoken + candidate only; no modelTurn/chain of thought)
   const generateTranscript = useCallback(() => {
@@ -251,121 +263,6 @@ const InterviewSystem: React.FC = () => {
     }
   }, [logs, isRequestingEvaluation, generateTranscript]);
 
-  // Modify the function that listens for model responses
-  useEffect(() => {
-    const handleModelResponse = (content: any) => {
-      if (isModelTurn(content)) {
-        const responseText = content.modelTurn.parts
-          .filter((part: { text?: string }) => part.text)
-          .map((part: { text?: string }) => part.text || "")
-          .join("");
-
-        // Question counting is done in turnComplete handler (using spoken text only).
-        // If we're waiting for evaluation, capture this response
-        if (isRequestingEvaluation) {
-          evaluationResponseRef.current += responseText;
-          console.log(
-            "Collecting evaluation response:",
-            responseText.substring(0, 50) + "..."
-          );
-
-          // Check if the response contains evaluation content using more flexible criteria
-          if (
-            responseText.includes("ASSESSMENT") ||
-            responseText.includes("Score:") ||
-            responseText.includes("FEEDBACK") ||
-            responseText.toLowerCase().includes("evaluation") ||
-            responseText.includes("/10") ||
-            responseText.toLowerCase().includes("technical") ||
-            responseText.toLowerCase().includes("communication")
-          ) {
-            // Wait for the full response to arrive
-            setTimeout(() => {
-              console.log(
-                "Setting evaluation feedback:",
-                evaluationResponseRef.current.substring(0, 100) + "..."
-              );
-              setEvaluationFeedback(evaluationResponseRef.current);
-              interviewStore.setEvaluationFeedback(
-                evaluationResponseRef.current
-              );
-
-              // Try to extract scores
-              const technicalMatch = evaluationResponseRef.current.match(
-                /TECHNICAL.+?Score:\s*(\d+)/is
-              );
-              const communicationMatch = evaluationResponseRef.current.match(
-                /COMMUNICATION.+?Score:\s*(\d+)/is
-              );
-
-              if (technicalMatch && communicationMatch) {
-                interviewStore.setScores({
-                  technical: parseInt(technicalMatch[1]),
-                  communication: parseInt(communicationMatch[1]),
-                });
-              }
-
-              setIsRequestingEvaluation(false);
-              interviewStore.endInterview();
-
-              // Generate and save transcript if not already done
-              if (!hasGeneratedTranscript.current) {
-                const transcript = generateTranscript();
-                setInterviewTranscript(transcript);
-                hasGeneratedTranscript.current = true;
-              }
-            }, 1000);
-          }
-        }
-      }
-    };
-
-    client.on("content", handleModelResponse);
-    return () => {
-      client.off("content", handleModelResponse);
-    };
-  }, [
-    client,
-    isRequestingEvaluation,
-    generateTranscript,
-    interviewStarted,
-    interviewStore,
-  ]);
-
-  // Register for turn complete events to handle end of responses
-  useEffect(() => {
-    const handleTurnComplete = () => {
-      if (isRequestingEvaluation && evaluationResponseRef.current) {
-        console.log("Turn complete received while waiting for evaluation");
-        // Additional check in case the evaluation detection logic missed the content
-        setTimeout(() => {
-          if (
-            isRequestingEvaluation &&
-            evaluationResponseRef.current.length > 100
-          ) {
-            console.log("Forcing evaluation feedback completion");
-            setEvaluationFeedback(evaluationResponseRef.current);
-            interviewStore.setEvaluationFeedback(evaluationResponseRef.current);
-            setIsRequestingEvaluation(false);
-            interviewStore.endInterview();
-
-            // Generate and save transcript if not already done
-            if (!hasGeneratedTranscript.current) {
-              const transcript = generateTranscript();
-              setInterviewTranscript(transcript);
-              hasGeneratedTranscript.current = true;
-            }
-          }
-        }, 500);
-      }
-    };
-
-    client.on("turncomplete", handleTurnComplete);
-    return () => {
-      client.off("turncomplete", handleTurnComplete);
-    };
-  }, [client, isRequestingEvaluation, generateTranscript, interviewStore]);
-
   const handleSelectionComplete = async (
     type: InterviewType,
     level: SkillLevel
@@ -476,18 +373,7 @@ const InterviewSystem: React.FC = () => {
     */
   };
 
-  // Helper: is this spoken text a question (not evaluation)?
-  const isSpokenQuestion = useCallback((text: string) => {
-    const t = text.trim();
-    if (!t) return false;
-    const hasQuestion = t.includes("?") ||
-      /\b(what|how|why|when|where|can you|could you|would you|explain|describe|tell me|walk me through|discuss|give me|talk about|think about)\b/i.test(t);
-    const isEval = /evaluation|assessment|score:|feedback|## TECHNICAL|## COMMUNICATION|## OVERALL/i.test(t);
-    return hasQuestion && !isEval;
-  }, []);
-
   // Stream outputTranscription word-by-word into same bubble; flush candidate when model starts, flush both on turncomplete
-  // Count questions here (once per turn, using spoken text only) instead of in modelTurn (which streams and can include chain of thought)
   useEffect(() => {
     const handleOutputTranscription = (text: string) => {
       if (interviewStarted && !isRequestingEvaluation && text.trim()) {
@@ -524,41 +410,22 @@ const InterviewSystem: React.FC = () => {
       }
     };
     const handleTurnCompleteForBuffers = () => {
+      // Check for conclusion in accumulated buffers before clearing (phrase may be split across chunks; turncomplete can fire before last chunk in same message)
+      if (
+        !interviewConcludedTriggeredRef.current &&
+        !isRequestingEvaluation &&
+        (textIndicatesInterviewConcluded(currentSpokenTurnRef.current) ||
+          textIndicatesInterviewConcluded(currentTurnTextRef.current))
+      ) {
+        console.log("Interview conclusion detected (on turncomplete), starting end-interview flow");
+        interviewConcludedTriggeredRef.current = true;
+        requestEvaluationRef.current?.();
+      }
+      currentTurnTextRef.current = "";
+      currentSpokenTurnRef.current = "";
       const state = useInterviewStore.getState();
       const pendingCandidate = state.pendingCandidateContent?.trim() || "";
-      const pendingInterviewer = state.pendingInterviewerContent?.trim() || "";
 
-      // Show popup when user has answered the Nth question (candidate content arrives via inputTranscription → flush)
-      if (
-        interviewStarted &&
-        !isRequestingEvaluation &&
-        pendingCandidate &&
-        waitingForLastAnswerRef.current &&
-        !endInterviewPopupShownRef.current
-      ) {
-        waitingForLastAnswerRef.current = false;
-        endInterviewPopupShownRef.current = true;
-        setShowEndInterviewPopup(true);
-        console.log("📊 End-interview popup shown (user answered last question)");
-      }
-
-      modelTurnsCompletedRef.current += 1;
-      if (
-        interviewStarted &&
-        !isRequestingEvaluation &&
-        modelTurnsCompletedRef.current > 1 &&
-        isSpokenQuestion(pendingInterviewer)
-      ) {
-        setQuestionsAsked((prev) => {
-          const newCount = prev + 1;
-          console.log(`📊 Question ${newCount} asked (from spoken text)`);
-          if (newCount >= numQuestions && !endInterviewPopupShownRef.current) {
-            waitingForLastAnswerRef.current = true;
-            console.log("📊 Waiting for user to answer last question");
-          }
-          return newCount;
-        });
-      }
       // Only flush pendingCandidateContent if it hasn't been replaced by a corrected transcript
       // The corrected transcript from <user_transcript> already cleared pendingCandidateContent
       // So if there's still pending content, it means no corrected transcript arrived - flush it
@@ -573,20 +440,13 @@ const InterviewSystem: React.FC = () => {
       client.off("outputTranscription", handleOutputTranscription);
       client.off("turncomplete", handleTurnCompleteForBuffers);
     };
-  }, [client, interviewStore, interviewStarted, isRequestingEvaluation, isSpokenQuestion, numQuestions]);
+  }, [client, interviewStore, interviewStarted, isRequestingEvaluation]);
 
   // Stream inputTranscription word-by-word into same bubble; flush when model starts or on turncomplete
   useEffect(() => {
     const handleInputTranscription = (text: string) => {
       if (interviewStarted && !isRequestingEvaluation && text.trim()) {
         interviewStore.appendPendingCandidate(text.trim());
-        // Show popup as soon as user starts answering the last question
-        if (waitingForLastAnswerRef.current && !endInterviewPopupShownRef.current) {
-          waitingForLastAnswerRef.current = false;
-          endInterviewPopupShownRef.current = true;
-          setShowEndInterviewPopup(true);
-          console.log("📊 End-interview popup shown (user started answering last question)");
-        }
       }
     };
     client.on("inputTranscription", handleInputTranscription);
@@ -620,13 +480,6 @@ const InterviewSystem: React.FC = () => {
 
             // Add the transcription to the interview store
             interviewStore.addMessage("candidate", transcription);
-
-            // Show end-interview popup when user has answered the Nth question
-            if (waitingForLastAnswerRef.current && !endInterviewPopupShownRef.current) {
-              waitingForLastAnswerRef.current = false;
-              endInterviewPopupShownRef.current = true;
-              setShowEndInterviewPopup(true);
-            }
 
             // Respond to the tool call
             client.sendToolResponse({
@@ -714,21 +567,18 @@ const InterviewSystem: React.FC = () => {
     setShowTranscript(false);
     evaluationResponseRef.current = "";
     hasGeneratedTranscript.current = false;
+    interviewConcludedTriggeredRef.current = false;
+    currentTurnTextRef.current = "";
+    currentSpokenTurnRef.current = "";
 
     // Reset and start the interview in the store
     interviewStore.resetInterview();
     interviewStore.startInterview();
 
     // Start the interview with the initial question
-    // QUESTION GENERATOR DISABLED: Always use fallback question
     if (interviewType && skillLevel) {
       const promptData = generateInterviewPrompt(interviewType, skillLevel, null, numQuestions);
       const initialQuestion = promptData.initialQuestion;
-      
-      // Count the initial question
-      setQuestionsAsked(1);
-      console.log(`📊 Starting interview with question 1`);
-      
       client.send([{ text: "QUESTION TO ASK: " + initialQuestion }]);
       setInterviewStarted(true);
     }
@@ -744,11 +594,9 @@ const InterviewSystem: React.FC = () => {
     setShowTranscript(false);
     evaluationResponseRef.current = "";
     hasGeneratedTranscript.current = false;
-    setQuestionsAsked(0);
-    setShowEndInterviewPopup(false);
-    endInterviewPopupShownRef.current = false;
-    waitingForLastAnswerRef.current = false;
-    modelTurnsCompletedRef.current = 0;
+    interviewConcludedTriggeredRef.current = false;
+    currentTurnTextRef.current = "";
+    currentSpokenTurnRef.current = "";
     hasSyncedCandidateFromLogsRef.current = false;
     lastProcessedPromptRef.current = null;
 
@@ -875,6 +723,77 @@ CRITICAL:
     skillLevel,
   ]);
 
+  // Keep ref updated so turncomplete handler can trigger evaluation
+  useEffect(() => {
+    requestEvaluationRef.current = requestEvaluation;
+    return () => {
+      requestEvaluationRef.current = null;
+    };
+  }, [requestEvaluation]);
+
+  // When the live model says "the interview is concluded", run the end-interview flow (close socket + evaluation agent)
+  useEffect(() => {
+    const handleModelResponse = (content: any) => {
+      if (isModelTurn(content)) {
+        const responseText = content.modelTurn.parts
+          .filter((part: { text?: string }) => part.text)
+          .map((part: { text?: string }) => part.text || "")
+          .join("");
+
+        currentTurnTextRef.current += responseText;
+
+        if (
+          interviewStarted &&
+          !interviewConcludedTriggeredRef.current &&
+          !isRequestingEvaluation
+        ) {
+          const lower = currentTurnTextRef.current.toLowerCase();
+          const concluded =
+            lower.includes("interview is concluded") ||
+            lower.includes("the interview is concluded") ||
+            lower.includes("interview concluded");
+          if (concluded) {
+            console.log("Interview conclusion detected, starting end-interview flow");
+            interviewConcludedTriggeredRef.current = true;
+            requestEvaluation();
+          }
+        }
+      }
+    };
+
+    client.on("content", handleModelResponse);
+    return () => {
+      client.off("content", handleModelResponse);
+    };
+  }, [
+    client,
+    interviewStarted,
+    isRequestingEvaluation,
+    requestEvaluation,
+  ]);
+
+  // Also detect conclusion in streamed spoken output so we trigger immediately when the model says it (no wait for user audio)
+  useEffect(() => {
+    const handleSpokenConclusion = (text: string) => {
+      if (!text.trim()) return;
+      currentSpokenTurnRef.current += text;
+      if (
+        interviewStarted &&
+        !interviewConcludedTriggeredRef.current &&
+        !isRequestingEvaluation &&
+        textIndicatesInterviewConcluded(currentSpokenTurnRef.current)
+      ) {
+        console.log("Interview conclusion detected (spoken), starting end-interview flow");
+        interviewConcludedTriggeredRef.current = true;
+        requestEvaluation();
+      }
+    };
+    client.on("outputTranscription", handleSpokenConclusion);
+    return () => {
+      client.off("outputTranscription", handleSpokenConclusion);
+    };
+  }, [client, interviewStarted, isRequestingEvaluation, requestEvaluation]);
+
   return (
     <div className="interview-system">
       {!interviewInProgress && (
@@ -994,38 +913,6 @@ CRITICAL:
           <InterviewTranscript />
         </div>
       )}
-
-      {showEndInterviewPopup &&
-        createPortal(
-          <div className="interview-system">
-            <div className="end-interview-popup-overlay" role="dialog" aria-modal="true" aria-labelledby="end-interview-popup-title">
-              <div className="end-interview-popup">
-                <h2 id="end-interview-popup-title">End interview?</h2>
-                <p>You&apos;ve had {questionsAsked} question{questionsAsked === 1 ? "" : "s"}. Do you want to end the interview and get feedback?</p>
-                <div className="end-interview-popup-actions">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => {
-                      setShowEndInterviewPopup(false);
-                      requestEvaluation();
-                    }}
-                  >
-                    Yes, end interview
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => setShowEndInterviewPopup(false)}
-                  >
-                    No, continue
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
 
       {evaluationFeedback && (
         <div className="evaluation-results-container">

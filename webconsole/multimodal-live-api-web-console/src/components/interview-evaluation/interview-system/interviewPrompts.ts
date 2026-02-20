@@ -77,7 +77,7 @@ CRITICAL INSTRUCTIONS FOR USING PRE-GENERATED QUESTIONS:
 3. When you receive a message starting with "QUESTION TO ASK:", that is the next question you should present to the candidate
 4. After the candidate answers each question, you may ask brief follow-up questions or provide hints, but then move to the next pre-generated question
 5. Use the provided rubric and expected signals to evaluate each response
-6. After asking all ${totalQuestions} questions (1 initial + ${questionBank.followUpQuestions.length} follow-ups), provide the formal evaluation
+6. After asking all ${totalQuestions} questions and the candidate has answered the last one, conclude in your next response: do NOT ask another question; only thank the candidate and say clearly "The interview is concluded."
 7. Do NOT generate new questions - ONLY use the pre-generated questions listed above
 8. Track which question number you're on (1, 2, 3, 4, etc.) and progress sequentially through all questions
 `;
@@ -95,22 +95,7 @@ function getBasePrompt(type: InterviewType, questionLimit: number = 4): string {
 - Always start with an overview of the interview format, introduce yourself as "Gemini" or simply as the interviewer
 - When you receive a message that starts with "QUESTION TO ASK:", understand that this is a question you should present to the candidate, not answer yourself.
 - Limit yourself to ${questionLimit} focused questions total to respect the 5-minute format.
-- After ${questionLimit} question exchanges or when the candidate clicks "End Interview & Get Feedback", you MUST provide a formal evaluation.
-
-  - Your evaluation MUST follow this exact format:
-  
-  ## TECHNICAL SKILLS ASSESSMENT
-  Score: [1-10]/10
-  [Your detailed feedback here]
-  
-  ## COMMUNICATION ASSESSMENT
-  Score: [1-10]/10
-  [Your feedback on communication here]
-  
-  ## OVERALL FEEDBACK
-  [Your summary and recommendations here]
-  
-  - This evaluation is critical and must be displayed prominently.
+- When you have asked all ${questionLimit} questions and the candidate has answered the last one, conclude immediately in your next response. Do NOT ask another question, do NOT say "one more question" or add any new question. Only thank the candidate briefly and say clearly "The interview is concluded." If the candidate requests to end early, do the same: thank them and say "The interview is concluded." Do NOT provide scores or assessment sections—only a brief thank-you and the conclusion phrase. The evaluation will be generated separately after the session ends.
   
  AUDIO TRANSCRIPTION - CRITICAL INSTRUCTIONS:
 - CRUCIAL: You MUST call the add_candidate_response function IMMEDIATELY whenever you receive audio from the candidate.
