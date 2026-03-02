@@ -1,0 +1,181 @@
+{
+  "domains": [
+    {
+      "id": "frontend",
+      "label": "Frontend Engineering",
+      "icon": "🖥️",
+      "topics": [
+        { "id": "react", "label": "React" },
+        { "id": "typescript", "label": "TypeScript" },
+        { "id": "css", "label": "CSS & Layout" },
+        { "id": "performance", "label": "Web Performance" },
+        { "id": "accessibility", "label": "Accessibility" },
+        { "id": "system-design", "label": "Frontend System Design" },
+        { "id": "state-management", "label": "State Management" },
+        { "id": "testing", "label": "Testing (Unit/E2E)" }
+      ],
+      "prompt_context": "You are interviewing for a frontend engineering role. Focus on browser APIs, component architecture, rendering performance, CSS layout models, state management patterns, and frontend system design. Expect candidates to discuss real DOM vs virtual DOM, hydration, bundling, and cross-browser concerns."
+    },
+    {
+      "id": "backend",
+      "label": "Backend Engineering",
+      "icon": "⚙️",
+      "topics": [
+        { "id": "apis", "label": "API Design (REST/GraphQL)" },
+        { "id": "databases", "label": "Databases (SQL/NoSQL)" },
+        { "id": "system-design", "label": "System Design" },
+        { "id": "microservices", "label": "Microservices" },
+        { "id": "security", "label": "Security & Auth" },
+        { "id": "caching", "label": "Caching Strategies" },
+        { "id": "messaging", "label": "Message Queues & Event Systems" }
+      ],
+      "prompt_context": "You are interviewing for a backend engineering role. Focus on API design principles, database modeling and query optimization, distributed systems, caching strategies, authentication/authorization, and service communication patterns."
+    },
+    {
+      "id": "fullstack",
+      "label": "Full Stack Engineering",
+      "icon": "🔗",
+      "topics": [
+        { "id": "architecture", "label": "Full Stack Architecture" },
+        { "id": "devops", "label": "DevOps & CI/CD" },
+        { "id": "testing", "label": "Testing Strategy" },
+        { "id": "api-integration", "label": "API Integration" },
+        { "id": "performance", "label": "End-to-End Performance" }
+      ],
+      "prompt_context": "You are interviewing for a full stack engineering role. Questions should span both frontend and backend, covering end-to-end architecture, data flow from database to UI, deployment pipelines, and holistic system thinking."
+    },
+    {
+      "id": "infrastructure",
+      "label": "Infrastructure & DevOps",
+      "icon": "☁️",
+      "topics": [
+        { "id": "cloud", "label": "Cloud Platforms (AWS/GCP/Azure)" },
+        { "id": "kubernetes", "label": "Kubernetes & Containers" },
+        { "id": "networking", "label": "Networking & DNS" },
+        { "id": "monitoring", "label": "Monitoring & Observability" },
+        { "id": "iac", "label": "Infrastructure as Code" },
+        { "id": "cicd", "label": "CI/CD Pipelines" },
+        { "id": "security", "label": "Cloud Security" }
+      ],
+      "prompt_context": "You are interviewing for an infrastructure/DevOps role. Focus on cloud architecture, container orchestration, networking fundamentals, monitoring and alerting, IaC tools (Terraform, Pulumi), and reliability engineering (SLOs, SLAs, incident response)."
+    },
+    {
+  "id": "hvac",
+  "label": "HVAC Technician",
+  "icon": "🌡️",
+  "topics": [
+        { "id": "refrigeration", "label": "Refrigeration Cycle" },
+        { "id": "electrical", "label": "Electrical Systems" },
+        { "id": "airflow", "label": "Airflow & Ductwork" },
+        { "id": "troubleshooting", "label": "Troubleshooting & Diagnostics" },
+        { "id": "controls", "label": "Controls & Thermostats" },
+        { "id": "codes", "label": "Building Codes & EPA Regulations" },
+        { "id": "heat-pumps", "label": "Heat Pumps" },
+        { "id": "commercial", "label": "Commercial HVAC Systems" }
+      ],
+      "prompt_context": "You are interviewing for an HVAC technician role. Focus on refrigeration cycles, electrical diagnostics, airflow balancing, duct design, heat load calculations, EPA 608 regulations, refrigerant handling, troubleshooting common failures, and commercial vs residential system differences."
+    },
+    {
+      "id": "python",
+      "label": "Python Deep-Dive",
+      "icon": "🐍",
+      "topics": [
+        { "id": "core", "label": "Core Python" },
+        { "id": "async", "label": "Async / Concurrency" },
+        { "id": "data-structures", "label": "Data Structures & Algorithms" },
+        { "id": "testing", "label": "Testing & Quality" },
+        { "id": "frameworks", "label": "Frameworks (Django/FastAPI/Flask)" },
+        { "id": "packaging", "label": "Packaging & Tooling" }
+      ],
+      "prompt_context": "You are interviewing with a focus on Python expertise. Cover Python internals (GIL, memory model, descriptors), idiomatic patterns, async/await, type hints, testing with pytest, and framework-specific patterns."
+    },
+    {
+      "id": "java",
+      "label": "Java Deep-Dive",
+      "icon": "☕",
+      "topics": [
+        { "id": "core", "label": "Core Java & JVM" },
+        { "id": "concurrency", "label": "Concurrency & Multithreading" },
+        { "id": "spring", "label": "Spring Framework" },
+        { "id": "design-patterns", "label": "Design Patterns" },
+        { "id": "testing", "label": "Testing (JUnit/Mockito)" },
+        { "id": "performance", "label": "JVM Performance Tuning" }
+      ],
+      "prompt_context": "You are interviewing with a focus on Java expertise. Cover JVM internals (GC, classloading, memory), concurrency (virtual threads, CompletableFuture), Spring ecosystem, OOP/SOLID principles, design patterns, and performance tuning."
+    },
+    {
+      "id": "javascript",
+      "label": "JavaScript / Node.js Deep-Dive",
+      "icon": "🟨",
+      "topics": [
+        { "id": "core", "label": "Core JavaScript" },
+        { "id": "async", "label": "Async Patterns & Event Loop" },
+        { "id": "node", "label": "Node.js Runtime" },
+        { "id": "typescript", "label": "TypeScript" },
+        { "id": "testing", "label": "Testing" },
+        { "id": "tooling", "label": "Build Tools & Bundlers" }
+      ],
+      "prompt_context": "You are interviewing with a focus on JavaScript/Node.js expertise. Cover the event loop, closures, prototypal inheritance, async patterns (promises, generators, async/await), V8 internals, module systems, and TypeScript type system."
+    },
+    {
+      "id": "go",
+      "label": "Go Deep-Dive",
+      "icon": "🐹",
+      "topics": [
+        { "id": "core", "label": "Core Go" },
+        { "id": "concurrency", "label": "Goroutines & Channels" },
+        { "id": "interfaces", "label": "Interfaces & Composition" },
+        { "id": "networking", "label": "Networking & HTTP" },
+        { "id": "testing", "label": "Testing & Benchmarking" }
+      ],
+      "prompt_context": "You are interviewing with a focus on Go expertise. Cover goroutines, channels, select statements, interfaces, error handling patterns, the Go memory model, and idiomatic Go patterns."
+    },
+    {
+      "id": "rust",
+      "label": "Rust Deep-Dive",
+      "icon": "🦀",
+      "topics": [
+        { "id": "ownership", "label": "Ownership & Borrowing" },
+        { "id": "traits", "label": "Traits & Generics" },
+        { "id": "concurrency", "label": "Concurrency (Send/Sync)" },
+        { "id": "error-handling", "label": "Error Handling" },
+        { "id": "async", "label": "Async Rust" },
+        { "id": "unsafe", "label": "Unsafe & FFI" }
+      ],
+      "prompt_context": "You are interviewing with a focus on Rust expertise. Cover ownership, borrowing, lifetimes, trait objects vs generics, error handling (Result/Option), async runtimes (tokio), and when/why to use unsafe."
+    }
+  ],
+  "difficulties": [
+    {
+      "id": "intern",
+      "label": "Intern / New Grad",
+      "level": 1,
+      "description": "CS fundamentals, basic syntax, simple problem-solving. Expect textbook definitions and straightforward coding questions."
+    },
+    {
+      "id": "junior",
+      "label": "Junior (0-2 yrs)",
+      "level": 2,
+      "description": "Working knowledge of tools and frameworks. Can explain how things work, solve standard problems, and discuss basic trade-offs."
+    },
+    {
+      "id": "mid",
+      "label": "Mid-Level (2-5 yrs)",
+      "level": 3,
+      "description": "Solid technical depth with real-world experience. Can discuss trade-offs, debugging strategies, and design choices with nuance."
+    },
+    {
+      "id": "senior",
+      "label": "Senior (5-8 yrs)",
+      "level": 4,
+      "description": "Deep expertise with architectural thinking. Can design systems, mentor others, and navigate ambiguity. Expects discussion of edge cases and production concerns."
+    },
+    {
+      "id": "staff",
+      "label": "Staff+ (8+ yrs)",
+      "level": 5,
+      "description": "Strategic technical leadership. Cross-team architecture, organizational impact, technical vision, and complex system evolution. Expects high-level reasoning about trade-offs at scale."
+    }
+  ],
+  "durations": [15, 30, 45]
+}

@@ -14,6 +14,17 @@
 .vscode
 /.idea
 
+# Dependencies
+v2/mockprep-frontend/node_modules/
+v2/mockprep-frontend/.next/
+v2/agent/venv/
+
+# Environment variables
+v2/agent/.env
+v2/mockprep-frontend/.env.local
+
+/python-interview
+
 # testing
 /coverage
 
