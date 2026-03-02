@@ -15,13 +15,17 @@
 /.idea
 
 # Dependencies
-v2/mockprep-frontend/node_modules/
-v2/mockprep-frontend/.next/
-v2/agent/venv/
+mockprep-frontend/node_modules/
+mockprep-frontend/.next/
+agent/venv/
 
 # Environment variables
-v2/agent/.env
-v2/mockprep-frontend/.env.local
+agent/.env
+mockprep-frontend/.env.local
+
+agent/venv/
+agent/__pycache__/
+agent/**/__pycache__/
 
 /python-interview
 
