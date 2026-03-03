@@ -25,6 +25,7 @@ from livekit.plugins import deepgram, google, silero, openai
 
 from interview_agent import InterviewAgent
 from feedback import compile_feedback
+from db import save_interview
 
 load_dotenv()
 
@@ -41,6 +42,8 @@ DEFAULT_CONFIG = {
     "length_mode": "duration",
     "duration": 30,
     "question_count": None,
+    "user_name": "",
+    "user_email": "agarway3@uci.edu",
 }
 
 
@@ -56,6 +59,10 @@ def parse_room_config(metadata: str | None) -> dict:
                 config["duration"] = int(data["duration"])
             if "question_count" in data:
                 config["question_count"] = int(data["question_count"])
+            if "user_name" in data:
+                config["user_name"] = data["user_name"]
+            if "user_email" in data:
+                config["user_email"] = data["user_email"]
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Could not parse room metadata: {e}. Using defaults.")
 
@@ -111,6 +118,8 @@ async def entrypoint(ctx: JobContext):
         question_count=config["question_count"],
     )
 
+    agent._config = config
+
     await session.start(agent=agent, room=ctx.room)
     # Listen for user end command
     @ctx.room.on("data_received")
@@ -119,11 +128,11 @@ async def entrypoint(ctx: JobContext):
             msg = json.loads(packet.data.decode())
             if msg.get("type") == "end_interview" and not agent._interview_ended:
                 import asyncio
-                asyncio.ensure_future(_user_triggered_end(agent, ctx.room))
+                asyncio.ensure_future(_user_triggered_end(agent, ctx.room, config))
         except Exception:
             pass
 
-async def _user_triggered_end(agent, room):
+async def _user_triggered_end(agent, room, config):
     """Handle user clicking End Interview button."""
     if agent._interview_ended:
         return
@@ -141,6 +150,11 @@ async def _user_triggered_end(agent, room):
         f"Interview ended by user: {len(agent._scores)} questions, "
         f"overall score: {feedback['overall_score']}"
     )
+
+    try:
+        save_interview(feedback, config)
+    except Exception as e:
+        logger.error(f"DB save failed: {e}")
 
     try:
         await room.local_participant.publish_data(

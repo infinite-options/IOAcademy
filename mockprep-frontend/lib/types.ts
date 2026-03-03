@@ -37,6 +37,8 @@ export interface InterviewConfig {
   lengthMode: LengthMode;
   duration: number | null;       // set when lengthMode = "duration"
   questionCount: number | null;  // set when lengthMode = "questions"
+  name: string;
+  email: string;
 }
 
 // Room metadata sent to the LiveKit agent
@@ -47,6 +49,8 @@ export interface RoomMetadata {
   length_mode: LengthMode;
   duration?: number;
   question_count?: number;
+  user_name?: string;
+  user_email?: string;
 }
 
 export interface ScoreEntry {

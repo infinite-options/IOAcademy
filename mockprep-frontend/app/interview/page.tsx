@@ -45,6 +45,8 @@ export default function InterviewPage() {
       length_mode: cfg.lengthMode,
       ...(cfg.duration && { duration: cfg.duration }),
       ...(cfg.questionCount && { question_count: cfg.questionCount }),
+      ...(cfg.name && { user_name: cfg.name }),
+      ...(cfg.email && { user_email: cfg.email }),
     };
 
     fetch("/api/token", {

@@ -219,6 +219,12 @@ class InterviewAgent(Agent):
             f"Interview ended: {len(self._scores)} questions, "
             f"overall score: {feedback['overall_score']}"
         )
+        
+        try:
+            from db import save_interview
+            save_interview(feedback, getattr(self, '_config', {}))
+        except Exception as e:
+            logger.error(f"DB save failed: {e}")
 
         try:
             # session = context.session

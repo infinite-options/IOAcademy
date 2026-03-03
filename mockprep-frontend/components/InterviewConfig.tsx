@@ -25,6 +25,8 @@ export default function InterviewConfig({
   const [lengthMode, setLengthMode] = useState<LengthMode>("duration");
   const [duration, setDuration] = useState(30);
   const [questionCount, setQuestionCount] = useState(5);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
 
   const allItems = getAllDomainItems();
   const domainData = allItems[domain];
@@ -43,6 +45,8 @@ export default function InterviewConfig({
       lengthMode,
       duration: lengthMode === "duration" ? duration : null,
       questionCount: lengthMode === "questions" ? questionCount : null,
+      name,
+      email,
     });
 
   if (!domainData) return null;
@@ -266,6 +270,44 @@ export default function InterviewConfig({
             </div>
           </div>
         )}
+      </Section>
+
+      {/* ── Your Info ── */}
+      <Section label="Your Info">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input
+            type="text"
+            placeholder="Your name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 10,
+              padding: "12px 16px",
+              fontSize: 14,
+              color: colors.text,
+              outline: "none",
+              width: "100%",
+            }}
+          />
+          <input
+            type="email"
+            placeholder="Email for feedback report"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            style={{
+              background: colors.surface,
+              border: `1px solid ${colors.border}`,
+              borderRadius: 10,
+              padding: "12px 16px",
+              fontSize: 14,
+              color: colors.text,
+              outline: "none",
+              width: "100%",
+            }}
+          />
+        </div>
       </Section>
 
       {/* ── Start Button ── */}
