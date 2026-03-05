@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
     "duration": 30,
     "question_count": None,
     "user_name": "",
-    "user_email": "agarway3@uci.edu",
+    "user_email": "yash18082002@gmail.com",
 }
 
 

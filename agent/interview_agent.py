@@ -221,10 +221,16 @@ class InterviewAgent(Agent):
         )
         
         try:
+            logger.info(f"_config exists: {hasattr(self, '_config')}")
+            logger.info(f"_config value: {getattr(self, '_config', 'NOT SET')}")
+            import pymysql
+            logger.info("pymysql imported successfully")
             from db import save_interview
-            save_interview(feedback, getattr(self, '_config', {}))
+            config = getattr(self, '_config', {})
+            logger.info(f"Attempting DB save: domain={config.get('domain')}, email={config.get('user_email')}")
+            save_interview(feedback, config)
         except Exception as e:
-            logger.error(f"DB save failed: {e}")
+            logger.error(f"DB save failed: {e}", exc_info=True)
 
         try:
             # session = context.session
@@ -237,8 +243,10 @@ class InterviewAgent(Agent):
                 )
                 logger.info("Feedback payload sent to frontend.")
                 try:
-                    send_feedback_email("agarway3@uci.edu", feedback)
-                    logger.info("Feedback email sent.")
+                    user_email = getattr(self, '_config', {}).get('user_email', '')
+                    if user_email:
+                        send_feedback_email(user_email, feedback)
+                        logger.info("Feedback email sent.")
                 except Exception as e:
                     logger.warning(f"Email send failed: {e}")
         except Exception as e:
