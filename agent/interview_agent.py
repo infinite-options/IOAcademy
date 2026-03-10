@@ -58,6 +58,10 @@ class InterviewAgent(Agent):
             f"{'questions=' + str(question_count) if length_mode == 'questions' else 'duration=' + str(duration_minutes) + 'min'}"
         )
 
+    async def on_enter(self):
+        """Called when the agent joins the session. Speak first."""
+        self.session.generate_reply()
+
     @function_tool()
     async def score_answer(
         self,
