@@ -30,37 +30,89 @@ def send_feedback_email(to_email: str, feedback: dict) -> None:
 
     html = f"""
     <html>
-    <body style="font-family: sans-serif; background: #0A0A0B; color: #E4E4E7; padding: 24px;">
-      <div style="max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #22D3EE;">MockPrep Interview Results</h1>
-        <p style="font-size: 18px;">Overall Score: <strong>{overall}/10</strong></p>
+    <body style="margin:0; padding:0; background-color:#f4f4f5; font-family:Arial,Helvetica,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5; padding:24px 0;">
+        <tr><td align="center">
+          <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; overflow:hidden;">
 
-        <h3 style="color: #4ADE80;">Strengths</h3>
-        <ul>{"".join(f"<li>{s}</li>" for s in strengths)}</ul>
+            <!-- Header -->
+            <tr>
+              <td style="background-color:#0A0A0B; padding:24px 32px; text-align:center;">
+                <span style="color:#22D3EE; font-size:24px; font-weight:bold;">MockPrep</span>
+                <br/>
+                <span style="color:#a1a1aa; font-size:14px;">Interview Performance Report</span>
+              </td>
+            </tr>
 
-        <h3 style="color: #F87171;">Areas to Improve</h3>
-        <ul>{"".join(f"<li>{s}</li>" for s in improvements)}</ul>
+            <!-- Score -->
+            <tr>
+              <td style="padding:32px; text-align:center; border-bottom:1px solid #e4e4e7;">
+                <span style="font-size:48px; font-weight:bold; color:#0A0A0B;">{overall}</span>
+                <span style="font-size:20px; color:#71717a;">/10</span>
+                <br/>
+                <span style="color:#71717a; font-size:14px;">Overall Score</span>
+              </td>
+            </tr>
 
-        <h3 style="color: #22D3EE;">Question Breakdown</h3>
+            <!-- Strengths -->
+            <tr>
+              <td style="padding:24px 32px;">
+                <h3 style="margin:0 0 12px; color:#16a34a; font-size:16px;">Strengths</h3>
+                {"".join(f'<p style="margin:4px 0; color:#27272a; font-size:14px;">&#x2713; {s}</p>' for s in strengths)}
+              </td>
+            </tr>
+
+            <!-- Areas to Improve -->
+            <tr>
+              <td style="padding:0 32px 24px; border-bottom:1px solid #e4e4e7;">
+                <h3 style="margin:0 0 12px; color:#dc2626; font-size:16px;">Areas to Improve</h3>
+                {"".join(f'<p style="margin:4px 0; color:#27272a; font-size:14px;">&#x2022; {s}</p>' for s in improvements)}
+              </td>
+            </tr>
+
+            <!-- Questions -->
+            <tr>
+              <td style="padding:24px 32px;">
+                <h3 style="margin:0 0 16px; color:#0A0A0B; font-size:16px;">Question Breakdown</h3>
     """
 
     for q in questions:
         q_scores = q.get("scores", {})
         avg = sum(q_scores.values()) / len(q_scores) if q_scores else 0
+        q_strengths = q.get('strengths', 'N/A')
+        q_improvements = q.get('improvements', 'N/A')
+        if isinstance(q_strengths, list):
+            q_strengths = ", ".join(q_strengths)
+        if isinstance(q_improvements, list):
+            q_improvements = ", ".join(q_improvements)
+
         html += f"""
-        <div style="background: #18181B; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-          <p><strong>Q{q.get('question_number', '?')}:</strong> {q.get('question_text', '')}</p>
-          <p>Score: {avg:.1f}/10</p>
-          <p style="color: #4ADE80;">Strengths: {q.get('strengths', 'N/A')}</p>
-          <p style="color: #F87171;">Improve: {q.get('improvements', 'N/A')}</p>
-        </div>
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb; border-radius:6px; margin-bottom:12px; border:1px solid #e4e4e7;">
+                  <tr>
+                    <td style="padding:16px;">
+                      <p style="margin:0 0 8px; font-size:14px; color:#0A0A0B;"><strong>Q{q.get('question_number', '?')}:</strong> {q.get('question_text', '')}</p>
+                      <p style="margin:0 0 4px; font-size:13px; color:#71717a;">Score: <strong style="color:#0A0A0B;">{avg:.1f}/10</strong></p>
+                      <p style="margin:0 0 4px; font-size:13px; color:#16a34a;">Strengths: {q_strengths}</p>
+                      <p style="margin:0; font-size:13px; color:#dc2626;">Improve: {q_improvements}</p>
+                    </td>
+                  </tr>
+                </table>
         """
 
     html += """
-        <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
-          Sent by MockPrep — AI Mock Interview Platform
-        </p>
-      </div>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="padding:20px 32px; background-color:#f9fafb; text-align:center; border-top:1px solid #e4e4e7;">
+                <span style="color:#a1a1aa; font-size:12px;">Sent by MockPrep — AI Mock Interview Platform</span>
+              </td>
+            </tr>
+
+          </table>
+        </td></tr>
+      </table>
     </body>
     </html>
     """
