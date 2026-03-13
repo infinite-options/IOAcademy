@@ -142,6 +142,7 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [currentDifficulty, setCurrentDifficulty] = useState(config.difficulty);
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
+  const [rateLimitError, setRateLimitError] = useState<string | null>(null);
 
   const allItems = getAllDomainItems();
   const domainData = allItems[config.domain];
@@ -174,6 +175,12 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
             String(config.duration || config.questionCount || 0)
           );
           setTimeout(() => router.push("/feedback"), 1500);
+        }
+        // Handle errors from agent
+        if (data.type === "error") {
+          if (data.code === 429) {
+            setRateLimitError(data.message || "Rate limit exceeded. Please wait and try again.");
+          }
         }
       } catch {
         // ignore non-JSON messages
@@ -404,6 +411,75 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
               End Interview
             </button>
           </div>
+          {/* Rate Limit Error Modal */}
+          {rateLimitError && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.8)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 100,
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{
+                  background: colors.surface,
+                  border: `1px solid ${colors.red}`,
+                  borderRadius: 16,
+                  padding: 32,
+                  maxWidth: 400,
+                  textAlign: "center",
+                }}
+              >
+                <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
+                <h3 style={{ color: colors.red, fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
+                  High Demand
+                </h3>
+                <p style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 24 }}>
+                  {rateLimitError}
+                </p>
+                <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+                  <button
+                    onClick={() => setRateLimitError(null)}
+                    style={{
+                      background: colors.surface,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 10,
+                      padding: "10px 24px",
+                      color: colors.text,
+                      cursor: "pointer",
+                      fontSize: 14,
+                    }}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    onClick={() => {
+                      room.disconnect();
+                      router.push("/");
+                    }}
+                    style={{
+                      background: colors.redDim,
+                      border: `1px solid ${colors.red}`,
+                      borderRadius: 10,
+                      padding: "10px 24px",
+                      color: colors.red,
+                      cursor: "pointer",
+                      fontSize: 14,
+                      fontWeight: 600,
+                    }}
+                  >
+                    Exit
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
 
         {/* Right: Transcript */}

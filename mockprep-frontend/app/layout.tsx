@@ -11,6 +11,9 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "MockPrep — AI Mock Interviews",
   description: "Practice technical interviews with AI that adapts to your level.",
+  icons: {
+    icon: "/icon.svg"
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
