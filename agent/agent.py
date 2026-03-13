@@ -93,19 +93,25 @@ async def entrypoint(ctx: JobContext):
     )
 
     session = AgentSession(
-        vad=silero.VAD.load(),
+        vad=silero.VAD.load(
+            min_speech_duration=0.5,
+            min_silence_duration=1.0,
+            padding_duration=0.5,
+            activation_threshold=0.6,
+        ),
         stt=deepgram.STT(
             model="nova-3",
             language="en",
+            endpointing_ms=500,
         ),
-        # llm=google.LLM(
-        #     model="gemini-2.5-flash",
-        #     temperature=0.7,  # Slight creativity for natural conversation
+        llm=google.LLM(
+            model="gemini-2.5-flash",
+            temperature=0.6,  # Slight creativity for natural conversation
+        ),
+        # llm=openai.LLM(
+        #     model="gpt-4.1-mini",
+        #     temperature=0.55,  # Slight creativity for natural conversation
         # ),
-        llm=openai.LLM(
-            model="gpt-4.1-mini",
-            temperature=0.4,  # Slight creativity for natural conversation
-        ),
         tts=deepgram.TTS(model="aura-2-thalia-en"),
     )
 
