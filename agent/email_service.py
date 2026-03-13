@@ -27,6 +27,11 @@ def send_feedback_email(to_email: str, feedback: dict) -> None:
     strengths = feedback.get("overall_strengths", [])
     improvements = feedback.get("areas_to_improve", [])
     questions = feedback.get("questions", [])
+    # Token usage
+    token_usage = feedback.get("token_usage", {})
+    total_tokens = token_usage.get("total_tokens", 0)
+    prompt_tokens = token_usage.get("prompt_tokens", 0)
+    completion_tokens = token_usage.get("completion_tokens", 0)
 
     html = f"""
     <html>
@@ -51,6 +56,28 @@ def send_feedback_email(to_email: str, feedback: dict) -> None:
                 <span style="font-size:20px; color:#71717a;">/10</span>
                 <br/>
                 <span style="color:#71717a; font-size:14px;">Overall Score</span>
+              </td>
+            </tr>
+
+            <!-- Token Usage -->
+            <tr>
+              <td style="padding:16px 32px; background-color:#f9fafb; border-bottom:1px solid #e4e4e7;">
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="text-align:center; padding:8px;">
+                      <span style="font-size:12px; color:#71717a;">Prompt Tokens</span><br/>
+                      <span style="font-size:16px; font-weight:bold; color:#0A0A0B;">{prompt_tokens:,}</span>
+                    </td>
+                    <td style="text-align:center; padding:8px;">
+                      <span style="font-size:12px; color:#71717a;">Completion Tokens</span><br/>
+                      <span style="font-size:16px; font-weight:bold; color:#0A0A0B;">{completion_tokens:,}</span>
+                    </td>
+                    <td style="text-align:center; padding:8px;">
+                      <span style="font-size:12px; color:#71717a;">Total Tokens</span><br/>
+                      <span style="font-size:16px; font-weight:bold; color:#22D3EE;">{total_tokens:,}</span>
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
 

@@ -179,7 +179,7 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
         // Handle errors from agent
         if (data.type === "error") {
           if (data.code === 429) {
-            setRateLimitError(data.message || "Rate limit exceeded. Please wait and try again.");
+            setRateLimitError("Rate limit exceeded. Please wait and try again."); // data.message || "current message"
           }
         }
       } catch {
@@ -191,6 +191,7 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
 
   useDataChannel("interview_state", onDataReceived);
   useDataChannel("interview_feedback", onDataReceived);
+  useDataChannel("interview_error", onDataReceived);
 
   // Collect transcript from LiveKit transcription events
   useEffect(() => {
@@ -411,7 +412,12 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
               End Interview
             </button>
           </div>
-          {/* Rate Limit Error Modal */}
+        </div>
+
+        {/* Right: Transcript */}
+        <TranscriptPanel messages={transcript} />
+      </div>
+      {/* Rate Limit Error Modal */}
           {rateLimitError && (
             <div
               style={{
@@ -438,7 +444,7 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
               >
                 <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
                 <h3 style={{ color: colors.red, fontSize: 18, fontWeight: 600, marginBottom: 8 }}>
-                  High Demand
+                  Token Limit
                 </h3>
                 <p style={{ color: colors.textSecondary, fontSize: 14, marginBottom: 24 }}>
                   {rateLimitError}
@@ -480,11 +486,6 @@ function InterviewRoom({ config }: { config: InterviewConfig }) {
               </motion.div>
             </div>
           )}
-        </div>
-
-        {/* Right: Transcript */}
-        <TranscriptPanel messages={transcript} />
-      </div>
     </div>
   );
 }

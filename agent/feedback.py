@@ -15,6 +15,7 @@ def compile_feedback(
     domain_id: str,
     topic_ids: list[str],
     starting_difficulty: str,
+    token_usage: dict | None = None,
 ) -> dict:
     """
     Compile all interview scores into a structured feedback report.
@@ -119,6 +120,11 @@ def compile_feedback(
         "recommended_next": {
             "difficulty": recommended_difficulty,
             "focus_areas": weak_dimensions,
+        },
+        "token_usage": token_usage or {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
         },
     }
 

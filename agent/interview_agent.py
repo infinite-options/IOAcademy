@@ -51,6 +51,11 @@ class InterviewAgent(Agent):
         self._scores: list[dict] = []
         self._question_count = 0
         self._interview_ended = False
+        self._token_usage = {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
 
         logger.info(
             f"InterviewAgent initialized: domain={domain_id}, "
@@ -61,6 +66,12 @@ class InterviewAgent(Agent):
     async def on_enter(self):
         """Called when the agent joins the session. Speak first."""
         self.session.generate_reply()
+
+    def _track_tokens(self, usage: dict):
+        """Accumulate token usage from LLM responses."""
+        self._token_usage["prompt_tokens"] += usage.get("prompt_tokens", 0)
+        self._token_usage["completion_tokens"] += usage.get("completion_tokens", 0)
+        self._token_usage["total_tokens"] += usage.get("total_tokens", 0)
 
     @function_tool()
     async def score_answer(
@@ -211,12 +222,21 @@ class InterviewAgent(Agent):
 
         self._interview_ended = True
 
+        # Get token usage (stored by the session metrics handler)
+        token_usage = getattr(self, '_token_usage', {
+            "prompt_tokens": 0, 
+            "completion_tokens": 0, 
+            "total_tokens": 0
+        })
+        logger.info(f"Final token usage: {token_usage}")
+
         feedback = compile_feedback(
             scores=self._scores,
             difficulty_progression=self._difficulty_engine.progression,
             domain_id=self._domain_id,
             topic_ids=self._topic_ids,
             starting_difficulty=self._starting_difficulty,
+            token_usage=token_usage,
         )
 
         logger.info(

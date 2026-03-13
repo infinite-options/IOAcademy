@@ -22,6 +22,7 @@ from dotenv import load_dotenv
 
 from livekit.agents import AgentServer, AgentSession, JobContext
 from livekit.plugins import deepgram, google, silero, openai
+from livekit.agents.metrics import UsageCollector
 
 from interview_agent import InterviewAgent
 from feedback import compile_feedback
@@ -126,7 +127,56 @@ async def entrypoint(ctx: JobContext):
 
     agent._config = config
 
+    # usage_collector = UsageCollector()
+
+    token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    
+    # Track metrics from the session
+    @session.on("metrics_collected")
+    def on_metrics(event):
+        metrics = event.metrics
+        
+        # Handle different metric types that contain token info
+        if hasattr(metrics, 'prompt_tokens') and hasattr(metrics, 'completion_tokens'):
+            token_usage["prompt_tokens"] += metrics.prompt_tokens or 0
+            token_usage["completion_tokens"] += metrics.completion_tokens or 0
+            token_usage["total_tokens"] = token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+            logger.info(f"Token usage updated: {token_usage}")
+        
+        # For realtime models (like Gemini Live)
+        if hasattr(metrics, 'input_tokens') and hasattr(metrics, 'output_tokens'):
+            token_usage["prompt_tokens"] += metrics.input_tokens or 0
+            token_usage["completion_tokens"] += metrics.output_tokens or 0
+            token_usage["total_tokens"] = token_usage["prompt_tokens"] + token_usage["completion_tokens"]
+            logger.info(f"Token usage updated (realtime): {token_usage}")
+
+    # Handle errors including rate limits
+    @session.on("error")
+    def on_error(error):
+        import asyncio
+        error_str = str(error).lower()
+        logger.error(f"Session error: {error}")
+        
+        # Check for rate limit (429)
+        if "429" in str(error) or "rate limit" in error_str or "resource exhausted" in error_str:
+            async def send_error():
+                try:
+                    await ctx.room.local_participant.publish_data(
+                        json.dumps({
+                            "type": "error",
+                            "code": 429,
+                            "message": "We're experiencing high demand. Please wait a moment and try again.",
+                        }).encode(),
+                        topic="interview_error",
+                    )
+                    logger.warning("Rate limit error sent to frontend")
+                except Exception as e:
+                    logger.error(f"Failed to send error to frontend: {e}")
+            
+            asyncio.create_task(send_error())
+
     await session.start(agent=agent, room=ctx.room)
+    agent._token_usage = token_usage
     # Listen for user end command
     @ctx.room.on("data_received")
     def on_data(packet):
@@ -144,12 +194,21 @@ async def _user_triggered_end(agent, room, config):
         return
     agent._interview_ended = True
 
+    # Get token usage
+    token_usage = getattr(agent, '_token_usage', {
+        "prompt_tokens": 0, 
+        "completion_tokens": 0, 
+        "total_tokens": 0
+    })
+    logger.info(f"Final token usage: {token_usage}")
+
     feedback = compile_feedback(
         scores=agent._scores,
         difficulty_progression=agent._difficulty_engine.progression,
         domain_id=agent._domain_id,
         topic_ids=agent._topic_ids,
         starting_difficulty=agent._starting_difficulty,
+        token_usage=token_usage,
     )
 
     logger.info(
